@@ -7,12 +7,15 @@ import math
 import datetime
 import os
 import sys
+import json
+import pickle
 from glob import glob
 
 from eval import SNLIEval
 from model import NLIModel
 from data import load_SNLI_datasets
 
+PARAM_CONFIG_FILE = "param_config.pik"
 
 class SNLITrain:
 
@@ -23,9 +26,9 @@ class SNLITrain:
 	def __init__(self, model_type, model_params, optimizer_params, batch_size, checkpoint_path):
 		self.train_dataset, _, _, _, self.word2id, wordvec_tensor = load_SNLI_datasets(debug_dataset = False)
 		self.model = NLIModel(model_type, model_params, wordvec_tensor)
-		self.optimizer = self._create_optimizer(optimizer_params)
 		self.evaluater = SNLIEval(self.model)
 		self.batch_size = batch_size
+		self._create_optimizer(optimizer_params)
 		self._prepare_checkpoint(checkpoint_path)
 		
 
@@ -37,15 +40,17 @@ class SNLITrain:
 		elif optimizer_params["optimizer"] == SNLITrain.OPTIMIZER_ADAM:
 			self.optimizer = torch.optim.Adam(self.model.parameters(), 
 											  lr=optimizer_params["lr"])
-
+		else:
+			print("[!] ERROR: Unknown optimizer: " + str(optimizer_params["optimizer"]))
+			sys.exit(1)
 		self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 1, gamma=optimizer_params["lr_decay_step"])
 		self.max_red_steps = optimizer_params["lr_max_red_steps"]
 
 
 	def _prepare_checkpoint(self, checkpoint_path):
 		if checkpoint_path is None:
-			current_date = datetime.now()
-			checkpoint_path = "checkpoints/%2i_%2i_%2i__%2i_%2i_%2i/" % (current_date.day, current_date.month, current_date.year, current_date.hour, current_date.minute, current_date.second)
+			current_date = datetime.datetime.now()
+			checkpoint_path = "checkpoints/%02d_%02d_%02d__%02d_%02d_%02d/" % (current_date.day, current_date.month, current_date.year, current_date.hour, current_date.minute, current_date.second)
 		if not os.path.exists(checkpoint_path):
 			os.makedirs(checkpoint_path)
 		self.checkpoint_path = checkpoint_path
@@ -64,11 +69,11 @@ class SNLITrain:
 		if torch.cuda.is_available():
 			loss_module = loss_module.cuda()
 
-		checkpoint_dict = self.load_model(self.checkpoint_path)
+		checkpoint_dict = self.load_model()
 		start_epoch = self._get_dict_val(checkpoint_dict, "epoch", 0)
 		eval_accuracies = self._get_dict_val(checkpoint_dict, "eval_accuracies", list())
 		loss_avg_list = self._get_dict_val(checkpoint_dict, "loss_avg_list", list())
-		lr_red_step = self._get_dict_val(checkpoint_dict, "lr_red_step", 0)
+		lr_red_step = self._get_dict_val(checkpoint_dict, "lr_red_step", list())
 		
 		for index_epoch in range(start_epoch, epochs):
 
@@ -97,8 +102,9 @@ class SNLITrain:
 
 			if len(eval_accuracies) > 2:
 				if eval_accuracies[-1] < (eval_accuracies[-2] + eval_accuracies[-3]) / 2:
+					print("Reducing learning rate")
 					self.lr_scheduler.step()
-					lr_red_step += 1
+					lr_red_step.append(index_epoch + 1)
 
 			checkpoint_dict = {
 				"epoch": index_epoch + 1,
@@ -106,11 +112,15 @@ class SNLITrain:
 				"loss_avg_list": loss_avg_list,
 				"lr_red_step": lr_red_step
 			}
-			self.save_model(lr_red_step)
+			self.save_model(index_epoch + 1, checkpoint_dict)
 
-			if lr_red_step > self.max_red_steps:
+			if len(lr_red_step) > self.max_red_steps:
 				print("Reached maximum number of learning rate reduction steps")
 				break
+
+		with open(os.path.join(self.checkpoint_path, "results.txt"), "w") as f:
+			f.write("".join(["Epoch %i: %4.2f%%\n" % (i+1,eval_accuracies[i]*100.0) for i in range(len(eval_accuracies))]))
+			f.write("Best accuracy achieved: %4.2f%%" % (max(eval_accuracies) * 100.0))
 
 
 	def load_model(self):
@@ -118,6 +128,7 @@ class SNLITrain:
 		if len(checkpoint_files) == 0:
 			return 0, list()
 		latest_checkpoint = checkpoint_files[-1]
+		print("Loading checkpoint \"" + str(latest_checkpoint) + "\"")
 		checkpoint = torch.load(latest_checkpoint)
 		self.model.load_state_dict(checkpoint['model_state_dict'])
 		self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -129,7 +140,7 @@ class SNLITrain:
 		return add_param_dict
 
 
-	def save_model(self, add_param_dict):
+	def save_model(self, epoch, add_param_dict):
 		checkpoint_file = os.path.join(self.checkpoint_path, 'checkpoint_' + str(epoch).zfill(3) + ".tar")
 		checkpoint_dict = {
 				'model_state_dict': self.model.state_dict(),
@@ -139,6 +150,7 @@ class SNLITrain:
 		for key, val in add_param_dict.items():
 			checkpoint_dict[key] = val
 		torch.save(checkpoint_dict, checkpoint_file)
+
 
 
 
@@ -157,6 +169,7 @@ if __name__ == '__main__':
 	parser.add_argument("--weight_decay", help="Weight decay of the SGD optimizer", type=float, default=1e-2)
 	parser.add_argument("--optimizer", help="Which optimizer to use. 0: SGD, 1: Adam", type=int, default=0)
 	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints should be saved", type=str, default=None)
+	parser.add_argument("--load_config", help="Tries to find parameter file in checkpoint path, and loads all given parameters from there", action="store_true")
 	parser.add_argument("--fc_dim", help="Number of hidden units in fully connected layers (classifier)", type=int, default=512)
 	parser.add_argument("--fc_dropout", help="Dropout probability in FC classifier", type=float, default=0.0)
 	parser.add_argument("--embed_dim", help="Embedding dimensionality of sentence", type=int, default=2048)
@@ -164,6 +177,16 @@ if __name__ == '__main__':
 	parser.add_argument("--seed", help="Seed to make experiments reproducable", type=int, default=42)
 
 	args = parser.parse_args()
+	print(args)
+
+	if args.load_config:
+		if args.checkpoint_path is None:
+			print("[!] ERROR: Please specify the checkpoint path to load the config from.")
+			sys.exit(1)
+		param_file_path = os.path.join(args.checkpoint_path, PARAM_CONFIG_FILE)
+		with open(param_file_path, "rb") as f:
+			print("Loading parameter configuration from \"" + str(args.checkpoint_path) + "\"")
+			args = pickle.load(f)
 
 	# Define model parameters
 	model_params = {
@@ -198,4 +221,8 @@ if __name__ == '__main__':
 							batch_size=args.batch_size,
 							checkpoint_path=args.checkpoint_path
 							)
+
+	with open(os.path.join(trainModule.checkpoint_path, PARAM_CONFIG_FILE), "wb") as f:
+		pickle.dump(args, f)
+
 	trainModule.train_model(50, loss_freq=50)
