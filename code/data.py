@@ -68,7 +68,7 @@ def create_word2vec_vocab():
 
 	for dataset, name in zip([train_dataset, test_dataset, val_dataset], ["train", "test", "val"]):
 		filename = name + "_word_list.txt"
-		if not os.isfile(filename):
+		if not os.path.isfile(filename):
 			word_list = val_dataset.get_word_list()
 			with open(filename, "w") as f:
 				f.write("\n".join(word_list))
@@ -77,7 +77,7 @@ def create_word2vec_vocab():
 	test_word_list = [l.rstrip() for l in open("test_word_list.txt", "r")]
 	val_word_list = [l.rstrip() for l in open("val_word_list.txt", "r")]
 	
-	word_list = list(set(val_word_list + test_word_list + train_word_list)) + ['<s>', '</s>', '<p>']
+	word_list = list(set(val_word_list + test_word_list + train_word_list)) + ['<s>', '</s>', '<p>', 'UNK']
 	print("Number of unique words in all datasets: " + str(len(word_list)))
 	voc = build_vocab(word_list)
 	np_word_list = []
@@ -251,10 +251,11 @@ class NLIData:
 
 
 if __name__ == '__main__':
-	train_dataset, val_dataset, test_dataset, word2vec, word2id = load_SNLI_datasets()
-	embeds, lengths, batch_labels = train_dataset.get_batch(8)
-	print("Embeddings: " + str(embeds))
-	print("Lengths: " + str(lengths))
-	print("Labels: " + str(batch_labels))
+	create_word2vec_vocab()
+	# train_dataset, val_dataset, test_dataset, word2vec, word2id = load_SNLI_datasets()
+	# embeds, lengths, batch_labels = train_dataset.get_batch(8)
+	# print("Embeddings: " + str(embeds))
+	# print("Lengths: " + str(lengths))
+	# print("Labels: " + str(batch_labels))
 
 
