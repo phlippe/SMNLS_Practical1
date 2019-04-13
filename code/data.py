@@ -7,6 +7,18 @@ import re
 import sys
 from random import shuffle
 
+# 0 => Full debug
+# 1 => Reduced output
+# 2 => No output at all (on cluster)
+DEBUG_LEVEL = 0
+
+def set_debug_level(level):
+	global DEBUG_LEVEL
+	DEBUG_LEVEL = level
+
+def debug_level():
+	global DEBUG_LEVEL
+	return DEBUG_LEVEL
 
 def build_vocab(word_list, glove_path='../glove.840B.300d.txt'):
 	word2vec = {}
@@ -18,7 +30,8 @@ def build_vocab(word_list, glove_path='../glove.840B.300d.txt'):
 		lines = f.readlines()
 		number_lines = len(lines)
 		for i, line in enumerate(lines):
-			print("Processed %4.2f%% of the glove (found %4.2f%% of words yet)" % (100.0 * i / number_lines, 100.0 * num_found_words / overall_num_words), end="\r")
+			if debug_level() == 0:
+				print("Processed %4.2f%% of the glove (found %4.2f%% of words yet)" % (100.0 * i / number_lines, 100.0 * num_found_words / overall_num_words), end="\r")
 			if num_found_words == overall_num_words:
 				break
 			# if num_found_words * 1.0 / overall_num_words > 0.7:
@@ -147,7 +160,8 @@ class SNLIDataset:
 		
 		i = 0
 		for prem, hyp, lab in zip(s1, s2, labels):
-			print("Read %4.2f%% of the dataset" % (100.0 * i / len(s1)), end="\r")
+			if debug_level() == 0:
+				print("Read %4.2f%% of the dataset" % (100.0 * i / len(s1)), end="\r")
 			i += 1
 			if lab == -1:
 				self.num_invalids += 1
@@ -158,7 +172,8 @@ class SNLIDataset:
 	def get_word_list(self):
 		all_words = dict()
 		for i, data in enumerate(self.data_list):
-			print("Processed %4.2f%% of the dataset" % (100.0 * i / len(self.data_list)), end="\r")
+			if debug_level() == 0:
+				print("Processed %4.2f%% of the dataset" % (100.0 * i / len(self.data_list)), end="\r")
 			data_words = data.premise_words + data.hypothesis_words
 			for w in data_words:
 				if w not in all_words:

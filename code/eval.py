@@ -2,7 +2,7 @@ import torch
 import torch.nn
 import argparse
 import math
-from data import load_SNLI_datasets
+from data import load_SNLI_datasets, debug_level
 
 
 class SNLIEval:
@@ -22,7 +22,8 @@ class SNLIEval:
 		correct_preds = []
 		preds_list = []
 		for batch_ind in range(number_batches):
-			print("Evaluation process: %4.2f%%" % (100.0 * batch_ind / number_batches), end="\r")
+			if debug_level() == 0:
+				print("Evaluation process: %4.2f%%" % (100.0 * batch_ind / number_batches), end="\r")
 			embeds, lengths, batch_labels = self.eval_dataset.get_batch(self.batch_size, loop_dataset=False, toTorch=True, bidirectional=self.model.is_bidirectional())
 			preds = self.model(words_s1 = embeds[0], lengths_s1 = lengths[0], words_s2 = embeds[1], lengths_s2 = lengths[1], applySoftmax=True)
 			_, pred_labels = torch.max(preds, dim=-1)

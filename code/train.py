@@ -13,7 +13,7 @@ from glob import glob
 
 from eval import SNLIEval
 from model import NLIModel
-from data import load_SNLI_datasets
+from data import load_SNLI_datasets, debug_level, set_debug_level
 
 PARAM_CONFIG_FILE = "param_config.pik"
 
@@ -159,6 +159,7 @@ class SNLITrain:
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
+	parser.add_argument("--cluster", help="Enable option if code is executed on cluster. Reduces output size", action="store_true")
 	parser.add_argument("-d", "--debug", help="Whether debug output should be activated or not", action="store_true")
 	parser.add_argument("--epochs", help="Maximum number of epochs to train. Default: dynamic with learning rate threshold", type=int, default=-1)
 	parser.add_argument("--eval_freq", help="Frequency of evaluation on validation set (in number of steps/iterations). Default: once per epoch", type=int, default=-1)
@@ -178,6 +179,12 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	print(args)
+	if args.cluster:
+		set_debug_level(2)
+		loss_freq = 500
+	else:
+		set_debug_level(0)
+		loss_freq = 50
 
 	if args.load_config:
 		if args.checkpoint_path is None:
@@ -225,4 +232,4 @@ if __name__ == '__main__':
 	with open(os.path.join(trainModule.checkpoint_path, PARAM_CONFIG_FILE), "wb") as f:
 		pickle.dump(args, f)
 
-	trainModule.train_model(50, loss_freq=50)
+	trainModule.train_model(50, loss_freq=loss_freq)
