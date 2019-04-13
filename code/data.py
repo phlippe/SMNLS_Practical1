@@ -98,14 +98,14 @@ SNLI_WORD2ID = None
 SNLI_WORDVEC_TENSOR = None
 
 def load_SNLI_datasets(debug_dataset=False):
-	# Train dataset takes time to load. If we just want to shortly debug the pipeline, set "debug_dataset" to true. Then the test dataset will be used for training
+	# Train dataset takes time to load. If we just want to shortly debug the pipeline, set "debug_dataset" to true. Then the validation dataset will be used for training
 	global SNLI_TRAIN_DATASET, SNLI_VAL_DATASET, SNLI_TEST_DATASET, SNLI_WORD2VEC, SNLI_WORD2ID, SNLI_WORDVEC_TENSOR
 	
 	if SNLI_WORD2VEC is None or SNLI_WORD2ID is None or SNLI_WORDVEC_TENSOR is None:
 		SNLI_WORD2VEC, SNLI_WORD2ID, SNLI_WORDVEC_TENSOR = load_word2vec_from_file()
 
 	if SNLI_TRAIN_DATASET is None:
-		train_dataset = SNLIDataset('train' if not debug_dataset else 'test', shuffle_data=True)
+		train_dataset = SNLIDataset('train' if not debug_dataset else 'dev', shuffle_data=True)
 		train_dataset.print_statistics()
 		train_dataset.set_vocabulary(SNLI_WORD2ID)
 		SNLI_TRAIN_DATASET = train_dataset
@@ -197,7 +197,7 @@ class SNLIDataset:
 			self.example_index = 0
 		return exmp
 
-	def get_batch(self, batch_size, loop_dataset=True, toTorch=False):
+	def get_batch(self, batch_size, loop_dataset=True, toTorch=False, bidirectional=False):
 		# Output sentences with dimensions (bsize, max_len)
 		if not loop_dataset:
 			batch_size = min(batch_size, len(self.perm_indices) - self.example_index)
@@ -209,13 +209,16 @@ class SNLIDataset:
 			batch_s1.append(data.premise_vocab)
 			batch_s2.append(data.hypothesis_vocab)
 			batch_labels.append(data.label)
+			if bidirectional:
+				batch_s1.append(data.premise_vocab[::-1])
+				batch_s2.append(data.hypothesis_vocab[::-1])
 
 		lengths = []
 		embeds = []
 		for batch_sents in [batch_s1, batch_s2]:
 			lengths_sents = np.array([x.shape[0] for x in batch_sents])
 			max_len = np.max(lengths_sents)
-			sent_embeds = np.zeros((batch_size, max_len), dtype=np.int32)
+			sent_embeds = np.zeros((len(batch_sents), max_len), dtype=np.int32)
 			for s_index, sent in enumerate(batch_sents):
 				sent_embeds[s_index, :sent.shape[0]] = sent
 			if toTorch:

@@ -20,6 +20,8 @@ class NLIModel(nn.Module):
 			self.embeddings.weight.data.copy_(torch.from_numpy(wordvec_tensor))
 			self.embeddings.weight.requires_grad = False
 
+		self.model_type = model_type
+		self.model_params = model_params
 		self._choose_encoder(model_type, model_params)
 		self.classifier = NLIClassifier(model_params)
 
@@ -59,6 +61,13 @@ class NLIModel(nn.Module):
 		return out
 
 
+	def is_bidirectional(self):
+		if self.model_type in [NLIModel.BILSTM, NLIModel.BILSTM_MAX]:
+			return True
+		return False
+
+
+
 class NLIClassifier(nn.Module):
 
 	def __init__(self, model_params):
@@ -73,9 +82,9 @@ class NLIClassifier(nn.Module):
 			nn.Dropout(p=fc_dropout),
 			nn.Linear(input_dim, fc_dim),
 			nn.Tanh(),
-			nn.Dropout(p=fc_dropout),
-			nn.Linear(fc_dim, fc_dim),
-			nn.Tanh(),
+			# nn.Dropout(p=fc_dropout),
+			# nn.Linear(fc_dim, fc_dim),
+			# nn.Tanh(),
 			nn.Dropout(p=fc_dropout),
 			nn.Linear(fc_dim, n_classes)
 		)
@@ -85,10 +94,14 @@ class NLIClassifier(nn.Module):
 		input_features = torch.cat((embed_s1, embed_s2, 
 									torch.abs(embed_s1 - embed_s2), 
 									embed_s1 * embed_s2), dim=1)
+		# print("Input features: " + str(input_features.shape))
 		out = self.classifier(input_features)
 		if applySoftmax:
 			out = self.softmax_layer(out)
-
+		# print("Mean first dimensions: " + str(torch.mean(input_features[:,0:4], dim=0)))
+		# print("Variance first dimensions: " + str(torch.var(input_features[:,0:4], dim=0)))
+		# print("Values out: " + str(out[0:2,:]))
+		
 		return out
 
 ####################
@@ -118,7 +131,7 @@ class EncoderLSTM(nn.Module):
 									hidden_size=model_params["embed_sent_dim"])
 
 	def forward(self, embed_words, lengths):
-		_, final_states = self.lstm_chain(embed_words, lengths)
+		final_states, _ = self.lstm_chain(embed_words, lengths)
 		return final_states
 
 
@@ -126,20 +139,44 @@ class EncoderBILSTM(nn.Module):
 
 	def __init__(self, model_params):
 		super(EncoderBILSTM, self).__init__()
-		embed_word_dim, embed_sent_dim = model_params["embed_word_dim"], model_params["embed_sent_dim"]
+		self.lstm_chain = LSTMChain(input_size=model_params["embed_word_dim"], 
+									hidden_size=int(model_params["embed_sent_dim"]/2))
 
 	def forward(self, embed_words, lengths):
-		raise NotImplentedError
+		# embed words is of shape [batch_size * 2, time, word_dim]
+		final_states, _ = self.lstm_chain(embed_words, lengths)
+		# Reshape to [batch_size, sent_dim]
+		final_states = final_states.reshape(shape=[-1, 2 * final_states.shape[1]])
+		return final_states
 
 
 class EncoderBILSTMPool(nn.Module):
 
 	def __init__(self, model_params):
 		super(EncoderBILSTMPool, self).__init__()
-		embed_word_dim, embed_sent_dim = model_params["embed_word_dim"], model_params["embed_sent_dim"]
+		self.lstm_chain = LSTMChain(input_size=model_params["embed_word_dim"], 
+									hidden_size=int(model_params["embed_sent_dim"]/2))
 
 	def forward(self, embed_words, lengths):
-		raise NotImplentedError
+		# embed words is of shape [batch_size * 2, time, word_dim]
+		_, outputs = self.lstm_chain(embed_words, lengths)
+		# Max time pooling
+		pooled_features = EncoderBILSTMPool.pool_over_time(outputs, lengths)
+		# Reshape to [batch_size, sent_dim]
+		pooled_features = pooled_features.reshape(shape=[-1, 2 * pooled_features.shape[1]])
+		return pooled_features
+
+	@staticmethod
+	def pool_over_time(outputs, lengths):
+		time_dim = outputs.shape[1]
+		word_positions = torch.arange(start=0, end=time_dim, dtype=lengths.dtype, device=outputs.device)
+		mask = (word_positions.reshape(shape=[1, -1, 1]) < lengths.reshape([-1, 1, 1])).float()
+		outputs = outputs * mask + (torch.min(outputs) - 1) * (1 - mask)
+		final_states, _ = torch.max(outputs, dim=1)
+		return final_states
+
+
+		
 
 
 
@@ -155,11 +192,10 @@ class LSTMCell(nn.Module):
 
 		self.input_size = input_size
 		self.hidden_size = hidden_size
-		self.bias = bias
 
 		self.tanh_act = nn.Tanh()
 		self.sigmoid_act = nn.Sigmoid()
-		self.combined_gate = nn.Linear(input_size + hidden_size, 4 * hidden_size)
+		self.combined_gate = nn.Linear(input_size + hidden_size, 4 * hidden_size, bias=bias)
 
 		self.reset_parameters()
 
@@ -169,7 +205,7 @@ class LSTMCell(nn.Module):
 		for weight in self.parameters():
 			weight.data.uniform_(-stdv, stdv)  
 
-	def forward(self, input_, hx, mask=None):
+	def forward(self, input_, hx):
 		"""
 		input is (batch, input_size)
 		hx is ((batch, hidden_size), (batch, hidden_size))
@@ -215,17 +251,35 @@ class LSTMChain(nn.Module):
 		hx = word_embeds.new_zeros(batch_size, self.lstm_cell.hidden_size)
 		cx = word_embeds.new_zeros(batch_size, self.lstm_cell.hidden_size)
 		# Iterate over time steps
+
 		outputs = []   
 		for i in range(time_dim):
 			hx, cx = self.lstm_cell(word_embeds[:, i], (hx, cx))
 			outputs.append(hx)
 
 		# Stack output over time dimension => Output states per time step
-		outputs = torch.stack(outputs, dim=1).contiguous() 
+		outputs = torch.stack(outputs, dim=0) 
+		outputs = outputs.transpose(0, 1).contiguous()
+
 		# Get final hidden state per sentence
 		reshaped_outputs = outputs.view(-1, self.lstm_cell.hidden_size) # Reshape for better indexing
 		indexes = (lengths - 1) + torch.arange(batch_size, device=word_embeds.device, dtype=lengths.dtype) * time_dim # Index of final states
-		final = outputs[indexes] # Final states
+		final = reshaped_outputs[indexes,:] # Final states
+		# print("Final: " + str(final[:,0]))
+		# print("="*50)
+		# print("Input: " + str(word_embeds[0:2,:,0]))
+		# print("-"*50)
+		# print("Length: " + str(lengths[0:2]))
+		# print("-"*50)
+		# print("Output: " + str(outputs[0:2,:,0]))
+		# print("-"*50)
+		# print("Final: " + str(final[0:2,0]))
+		# print("="*50)
+		# for weight in self.lstm_cell.parameters():
+		# 	if len(weight.shape) == 1:
+		# 		print("Bias: " + str(weight[0]))
+		# 	else:
+		# 		print("Weight: " + str(weight[0,0]))
 		return final, outputs
 
 
@@ -243,10 +297,24 @@ class ModuleTests():
 		print("Result: " + str(out))
 
 
+	def testBiLSTMReshaping(self):
+		output = torch.FloatTensor(np.array([[1, 3], [-2, -2], [2, -4], [-6, -1], [0, 0], [0, 0], [1, 2], [3, 4]], dtype=np.float32))
+		output = output.reshape(shape=[-1, 2 * output.shape[1]])
+		print("Result: " + str(output))
+
+	def testTimePooling(self):
+		output = torch.FloatTensor(np.array([[[1, 3], [-2, -2], [5, 1]], [[2, -4], [-6, -1], [0, 0]]], dtype=np.float32))
+		lengths = torch.LongTensor(np.array([2, 3]))
+		res = EncoderBILSTMPool.pool_over_time(output, lengths)
+		print("Result: " + str(res))
+
+
 if __name__ == '__main__':
 	print(torch.__version__)
 	tester = ModuleTests()
 	tester.testEncoderBOW()
+	tester.testTimePooling()
+	tester.testBiLSTMReshaping()
 
 
 
