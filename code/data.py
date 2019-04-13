@@ -55,8 +55,9 @@ def load_word2vec_from_file(word_file="small_glove_words.txt", numpy_file="small
 	for key, _ in word2vec.items():
 		word2id[key] = index
 		index += 1
+
 	print("Loaded vocabulary of size " + str(word_vecs.shape[0]))
-	return word2vec, word2id
+	return word2vec, word2id, word_vecs
 
 def create_word2vec_vocab():
 	val_dataset = SNLIDataset('dev')
@@ -89,22 +90,39 @@ def create_word2vec_vocab():
 	np_word_array = np.stack(np_word_list, axis=0)
 	np.save('small_glove_embed.npy', np_word_array)
 
+SNLI_TRAIN_DATASET = None
+SNLI_VAL_DATASET = None
+SNLI_TEST_DATASET = None
+SNLI_WORD2VEC = None
+SNLI_WORD2ID = None
+SNLI_WORDVEC_TENSOR = None
 
-def load_SNLI_datasets():
-	train_dataset = SNLIDataset('train', shuffle_data=True)
-	train_dataset.print_statistics()
-	val_dataset = SNLIDataset('dev', shuffle_data=False)
-	val_dataset.print_statistics()
-	test_dataset = SNLIDataset('test', shuffle_data=False)
-	test_dataset.print_statistics()
+def load_SNLI_datasets(debug_dataset=False):
+	# Train dataset takes time to load. If we just want to shortly debug the pipeline, set "debug_dataset" to true. Then the test dataset will be used for training
+	global SNLI_TRAIN_DATASET, SNLI_VAL_DATASET, SNLI_TEST_DATASET, SNLI_WORD2VEC, SNLI_WORD2ID, SNLI_WORDVEC_TENSOR
+	
+	if SNLI_WORD2VEC is None or SNLI_WORD2ID is None or SNLI_WORDVEC_TENSOR is None:
+		SNLI_WORD2VEC, SNLI_WORD2ID, SNLI_WORDVEC_TENSOR = load_word2vec_from_file()
 
-	word2vec, word2id = load_word2vec_from_file()
+	if SNLI_TRAIN_DATASET is None:
+		train_dataset = SNLIDataset('train' if not debug_dataset else 'test', shuffle_data=True)
+		train_dataset.print_statistics()
+		train_dataset.set_vocabulary(SNLI_WORD2ID)
+		SNLI_TRAIN_DATASET = train_dataset
 
-	train_dataset.set_vocabulary(word2id)
-	val_dataset.set_vocabulary(word2id)
-	test_dataset.set_vocabulary(word2id)
+	if SNLI_VAL_DATASET is None:
+		val_dataset = SNLIDataset('dev', shuffle_data=False)
+		val_dataset.print_statistics()
+		val_dataset.set_vocabulary(SNLI_WORD2ID)
+		SNLI_VAL_DATASET = val_dataset
 
-	return train_dataset, val_dataset, test_dataset, word2vec, word2id
+	if SNLI_TEST_DATASET is None:
+		test_dataset = SNLIDataset('test', shuffle_data=False)
+		test_dataset.print_statistics()
+		test_dataset.set_vocabulary(SNLI_WORD2ID)
+		SNLI_TEST_DATASET = test_dataset
+
+	return SNLI_TRAIN_DATASET, SNLI_VAL_DATASET, SNLI_TEST_DATASET, SNLI_WORD2VEC, SNLI_WORD2ID, SNLI_WORDVEC_TENSOR
 
 
 
@@ -121,14 +139,16 @@ class SNLIDataset:
 			shuffle(self.perm_indices)
 
 	def load_data(self, data_path, data_type):
-		
 		self.data_list = list()
 		self.num_invalids = 0
 		s1 = [line.rstrip() for line in open(data_path + "/s1." + data_type, 'r')]
 		s2 = [line.rstrip() for line in open(data_path + "/s2." + data_type, 'r')]
 		labels = [NLIData.LABEL_LIST[line.rstrip('\n')] for line in open(data_path + "/labels." + data_type, 'r')]
 		
+		i = 0
 		for prem, hyp, lab in zip(s1, s2, labels):
+			print("Read %4.2f%% of the dataset" % (100.0 * i / len(s1)), end="\r")
+			i += 1
 			if lab == -1:
 				self.num_invalids += 1
 				continue
@@ -177,8 +197,10 @@ class SNLIDataset:
 			self.example_index = 0
 		return exmp
 
-	def get_batch(self, batch_size):
+	def get_batch(self, batch_size, loop_dataset=True, toTorch=False):
 		# Output sentences with dimensions (bsize, max_len)
+		if not loop_dataset:
+			batch_size = min(batch_size, len(self.perm_indices) - self.example_index)
 		batch_s1 = []
 		batch_s2 = []
 		batch_labels = []
@@ -196,9 +218,29 @@ class SNLIDataset:
 			sent_embeds = np.zeros((batch_size, max_len), dtype=np.int32)
 			for s_index, sent in enumerate(batch_sents):
 				sent_embeds[s_index, :sent.shape[0]] = sent
+			if toTorch:
+				sent_embeds = torch.LongTensor(sent_embeds)
+				lengths_sents = torch.LongTensor(lengths_sents)
+				if torch.cuda.is_available():
+					sent_embeds = sent_embeds.cuda()
+					lengths_sents = lengths_sents.cuda()
 			lengths.append(lengths_sents)
 			embeds.append(sent_embeds)
+		if toTorch:
+			batch_labels = torch.LongTensor(np.array(batch_labels))
+			if torch.cuda.is_available():
+				batch_labels = batch_labels.cuda()
 		return embeds, lengths, batch_labels
+
+	def get_num_examples(self):
+		return len(self.data_list)
+
+	def get_num_classes(self):
+		c = 0
+		for key, val in NLIData.LABEL_LIST:
+			if val >= 0:
+				c += 1
+		return c
 
 
 class NLIData:
@@ -251,11 +293,11 @@ class NLIData:
 
 
 if __name__ == '__main__':
-	create_word2vec_vocab()
-	# train_dataset, val_dataset, test_dataset, word2vec, word2id = load_SNLI_datasets()
-	# embeds, lengths, batch_labels = train_dataset.get_batch(8)
-	# print("Embeddings: " + str(embeds))
-	# print("Lengths: " + str(lengths))
-	# print("Labels: " + str(batch_labels))
+	# create_word2vec_vocab()
+	train_dataset, val_dataset, test_dataset, word2vec, word2id, wordvec_tensor = load_SNLI_datasets()
+	embeds, lengths, batch_labels = train_dataset.get_batch(8)
+	print("Embeddings: " + str(embeds))
+	print("Lengths: " + str(lengths))
+	print("Labels: " + str(batch_labels))
 
 
