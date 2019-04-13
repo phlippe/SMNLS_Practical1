@@ -232,4 +232,4 @@ if __name__ == '__main__':
 	with open(os.path.join(trainModule.checkpoint_path, PARAM_CONFIG_FILE), "wb") as f:
 		pickle.dump(args, f)
 
-	trainModule.train_model(50, loss_freq=loss_freq)
+	trainModule.train_model(args.epochs, loss_freq=loss_freq)
