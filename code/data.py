@@ -5,6 +5,7 @@ import torch
 import json
 import re
 import sys
+from spellchecker import SpellChecker
 from random import shuffle
 
 # 0 => Full debug
@@ -25,6 +26,7 @@ def build_vocab(word_list, glove_path='../glove.840B.300d.txt'):
 	num_ignored_words = 0
 	num_missed_words = 0
 	num_found_words = 0
+	word_list = set(word_list)
 	overall_num_words = len(word_list)
 	with open(glove_path, "r") as f:
 		lines = f.readlines()
@@ -44,10 +46,15 @@ def build_vocab(word_list, glove_path='../glove.840B.300d.txt'):
 			else:
 				num_ignored_words += 1
 
+
+	spell = SpellChecker()
 	example_missed_words = list()
 	for word in word_list:
 		if word not in word2vec:
 			num_missed_words += 1
+			# mis_spelled =  spell.unknown([word])
+			# for w in mis_spelled:
+			# 	print("Correct word \""+w+"\" to " + str(spell.correction(w)))
 			if num_missed_words < 30:
 				example_missed_words.append(word)
 
@@ -100,9 +107,18 @@ def create_word2vec_vocab():
 	train_word_list = [l.rstrip() for l in open("train_word_list.txt", "r")]
 	test_word_list = [l.rstrip() for l in open("test_word_list.txt", "r")]
 	val_word_list = [l.rstrip() for l in open("val_word_list.txt", "r")]
+	senteval_word_list = [l.rstrip() for l in open("senteval_unknown_words.txt")]
 	
-	word_list = list(set(val_word_list + test_word_list + train_word_list)) + ['<s>', '</s>', '<p>', 'UNK']
+	word_list = list(set(val_word_list + test_word_list + train_word_list + senteval_word_list)) + ['<s>', '</s>', '<p>', 'UNK']
+	# Allow both with "-" and without "-" words to cover all possible preprocessing steps
+	print("Created word list with " + str(len(word_list)) + " words. Checking for \"-\" confusion...")
+	for word in word_list:
+		if "-" in word:
+			for w in word.split("-"):
+				if len(w) >= 1 and w not in word_list:
+					word_list.append(w)
 	print("Number of unique words in all datasets: " + str(len(word_list)))
+
 	voc = build_vocab(word_list)
 	np_word_list = []
 	with open('small_glove_words.txt', 'w') as f:
@@ -311,11 +327,27 @@ class NLIData:
 	def _sentence_to_dict(self, word_dict, sent):
 		vocab_words = list()
 		vocab_words += [word_dict['<s>']]
-		for w in sent:
-			if w in word_dict:
-				vocab_words.append(word_dict[w])
+		vocab_words += NLIData._word_seq_to_dict(sent, word_dict)
 		vocab_words += [word_dict['</s>']]
 		vocab_words = np.array(vocab_words, dtype=np.int32)
+		return vocab_words
+
+	@staticmethod
+	def _word_seq_to_dict(word_seq, word_dict):
+		vocab_words = list()
+		for w in word_seq:
+			if len(w) <= 0:
+				continue
+			if w in word_dict:
+				vocab_words.append(word_dict[w])
+			elif "-" in w:
+				vocab_words += NLIData._word_seq_to_dict(w.split("-"), word_dict)
+			elif "/" in w:
+				vocab_words += NLIData._word_seq_to_dict(w.split("/"), word_dict)
+			else:
+				subword = re.sub('\W+','', w)
+				if subword in word_dict:
+					vocab_words.append(word_dict[subword])
 		return vocab_words
 
 	def number_words_not_in_dict(self, word_dict):
@@ -332,11 +364,13 @@ class NLIData:
 
 if __name__ == '__main__':
 	# create_word2vec_vocab()
-	# train_dataset, val_dataset, test_dataset, word2vec, word2id, wordvec_tensor = load_SNLI_datasets()
+	train_dataset, val_dataset, test_dataset, word2vec, word2id, wordvec_tensor = load_SNLI_datasets()
 	# embeds, lengths, batch_labels = train_dataset.get_batch(8)
 	# print("Embeddings: " + str(embeds))
 	# print("Lengths: " + str(lengths))
 	# print("Labels: " + str(batch_labels))
 	save_word2vec_as_GloVe()
+
+	# print(NLIData._word_seq_to_dict(['this', 'is!', 'test-data', 'what-about-this-hereeee'], word2id))
 
 
