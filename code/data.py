@@ -72,6 +72,16 @@ def load_word2vec_from_file(word_file="small_glove_words.txt", numpy_file="small
 	print("Loaded vocabulary of size " + str(word_vecs.shape[0]))
 	return word2vec, word2id, word_vecs
 
+
+def save_word2vec_as_GloVe(output_file="small_glove_torchnlp.txt"):
+	word2vec, word2id, word_vecs = load_word2vec_from_file()
+	s = ""
+	for key, val in word2vec.items():
+		s += key + " " + " ".join([("%g" % (x)) for x in val]) + "\n"
+	with open(output_file, "w") as f:
+		f.write(s)
+
+
 def create_word2vec_vocab():
 	val_dataset = SNLIDataset('dev')
 	val_dataset.print_statistics()
@@ -312,10 +322,11 @@ class NLIData:
 
 if __name__ == '__main__':
 	# create_word2vec_vocab()
-	train_dataset, val_dataset, test_dataset, word2vec, word2id, wordvec_tensor = load_SNLI_datasets()
-	embeds, lengths, batch_labels = train_dataset.get_batch(8)
-	print("Embeddings: " + str(embeds))
-	print("Lengths: " + str(lengths))
-	print("Labels: " + str(batch_labels))
+	# train_dataset, val_dataset, test_dataset, word2vec, word2id, wordvec_tensor = load_SNLI_datasets()
+	# embeds, lengths, batch_labels = train_dataset.get_batch(8)
+	# print("Embeddings: " + str(embeds))
+	# print("Lengths: " + str(lengths))
+	# print("Labels: " + str(batch_labels))
+	save_word2vec_as_GloVe()
 
 
