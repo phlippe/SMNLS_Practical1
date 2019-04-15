@@ -11,11 +11,12 @@ import json
 import pickle
 from glob import glob
 
+from tensorboardX import SummaryWriter
+
 from eval import SNLIEval
 from model import NLIModel
 from data import load_SNLI_datasets, debug_level, set_debug_level
-
-PARAM_CONFIG_FILE = "param_config.pik"
+from mutils import load_model, load_args, args_to_params, get_dict_val, PARAM_CONFIG_FILE
 
 class SNLITrain:
 
@@ -23,8 +24,8 @@ class SNLITrain:
 	OPTIMIZER_ADAM = 1
 
 
-	def __init__(self, model_type, model_params, optimizer_params, batch_size, checkpoint_path):
-		self.train_dataset, _, _, _, self.word2id, wordvec_tensor = load_SNLI_datasets(debug_dataset = False)
+	def __init__(self, model_type, model_params, optimizer_params, batch_size, checkpoint_path, debug=False):
+		self.train_dataset, _, _, _, self.word2id, wordvec_tensor = load_SNLI_datasets(debug_dataset = debug)
 		self.model = NLIModel(model_type, model_params, wordvec_tensor)
 		self.evaluater = SNLIEval(self.model)
 		self.batch_size = batch_size
@@ -56,92 +57,107 @@ class SNLITrain:
 		self.checkpoint_path = checkpoint_path
 
 
-	def _get_dict_val(self, checkpoint_dict, key, default_val):
-		if key in checkpoint_dict:
-			return checkpoint_dict[key]
-		else:
-			return default_val
-
-
-	def train_model(self, epochs=50, loss_freq=50):
+	def train_model(self, epochs=50, loss_freq=50, enable_tensorboard=False):
 
 		loss_module = nn.CrossEntropyLoss()
 		if torch.cuda.is_available():
 			loss_module = loss_module.cuda()
 
-		checkpoint_dict = self.load_model()
-		start_epoch = self._get_dict_val(checkpoint_dict, "epoch", 0)
-		eval_accuracies = self._get_dict_val(checkpoint_dict, "eval_accuracies", list())
-		loss_avg_list = self._get_dict_val(checkpoint_dict, "loss_avg_list", list())
-		lr_red_step = self._get_dict_val(checkpoint_dict, "lr_red_step", list())
+		checkpoint_dict = self.load_recent_model()
+		start_epoch = get_dict_val(checkpoint_dict, "epoch", 0)
+		eval_accuracies = get_dict_val(checkpoint_dict, "eval_accuracies", list())
+		loss_avg_list = get_dict_val(checkpoint_dict, "loss_avg_list", list())
+		lr_red_step = get_dict_val(checkpoint_dict, "lr_red_step", list())
+		start_step = get_dict_val(checkpoint_dict, "step_index", 0)
+		if start_step != 0:
+			self.train_dataset.perm_indices = get_dict_val(checkpoint_dict, "dataset_perm", [])
+			self.train_dataset.example_index = get_dict_val(checkpoint_dict, "dataset_exm_index", 0)
+
+		if enable_tensorboard:
+			writer = SummaryWriter(self.checkpoint_path)
+		else:
+			writer = None
 		
-		for index_epoch in range(start_epoch, epochs):
+		try:
+			print("="*50 + "\nStarting training...\n"+"="*50)
+			for index_epoch in range(start_epoch, epochs):
 
-			self.model.train()
-			num_steps = int(math.ceil(self.train_dataset.get_num_examples() * 1.0 / self.batch_size))
-			loss_avg_list.append(0)
-			for step_index in range(num_steps):
+				if writer is not None:
+					writer.add_scalar("train/learning_rate", self.optimizer.param_groups[0]['lr'], index_epoch+1)
 
-				embeds, lengths, batch_labels = self.train_dataset.get_batch(self.batch_size, loop_dataset=False, toTorch=True, bidirectional=self.model.is_bidirectional())
-				preds = self.model(words_s1 = embeds[0], lengths_s1 = lengths[0], words_s2 = embeds[1], lengths_s2 = lengths[1], applySoftmax=False)
-				loss = loss_module(preds, batch_labels)
-
-				self.model.zero_grad()
-				loss.backward()
-				self.optimizer.step()
-
-				loss_avg_list[-1] += loss.item()
-				if (step_index + 1) % loss_freq == 0:
-					loss_avg_list[-1] = loss_avg_list[-1]  / loss_freq
-					print("Training epoch %i|%i, step %i|%i. Loss: %6.5f" % (index_epoch+1, epochs, step_index+1, num_steps, loss_avg_list[-1]))
+				self.model.train()
+				num_steps = int(math.ceil(self.train_dataset.get_num_examples() * 1.0 / self.batch_size))
+				if start_step == 0:
 					loss_avg_list.append(0)
-			del loss_avg_list[-1]
+				for step_index in range(start_step, num_steps):
 
-			acc = self.evaluater.eval(index_epoch)
-			eval_accuracies.append(acc)
+					embeds, lengths, batch_labels = self.train_dataset.get_batch(self.batch_size, loop_dataset=False, toTorch=True, bidirectional=self.model.is_bidirectional())
+					preds = self.model(words_s1 = embeds[0], lengths_s1 = lengths[0], words_s2 = embeds[1], lengths_s2 = lengths[1], applySoftmax=False)
+					loss = loss_module(preds, batch_labels)
 
-			if len(eval_accuracies) > 2:
-				if eval_accuracies[-1] < (eval_accuracies[-2] + eval_accuracies[-3]) / 2:
-					print("Reducing learning rate")
-					self.lr_scheduler.step()
-					lr_red_step.append(index_epoch + 1)
+					self.model.zero_grad()
+					loss.backward()
+					self.optimizer.step()
 
+					# if index_epoch == 0 and step_index == 0 and writer is not None:
+					# 	writer.add_graph(self.model.cpu(), (embeds[0].cpu(), lengths[0].cpu().int(), embeds[1].cpu(), lengths[1].cpu().int()), operator_export_type="ONNX")
+
+					loss_avg_list[-1] += loss.item()
+					if (step_index + 1) % loss_freq == 0:
+						loss_avg_list[-1] = loss_avg_list[-1]  / loss_freq
+						print("Training epoch %i|%i, step %i|%i. Loss: %6.5f" % (index_epoch+1, epochs, step_index+1, num_steps, loss_avg_list[-1]))
+						if writer is not None:
+							writer.add_scalar("train/loss", loss_avg_list[-1], num_steps * index_epoch + step_index + 1)
+						loss_avg_list.append(0)
+				del loss_avg_list[-1]
+				start_step = 0
+
+				acc = self.evaluater.eval(index_epoch)
+				eval_accuracies.append(acc)
+
+				if writer is not None:
+					writer.add_scalar("eval/acc", acc, index_epoch+1)
+
+				if len(eval_accuracies) > 2:
+					if eval_accuracies[-1] < (eval_accuracies[-2] + eval_accuracies[-3]) / 2:
+						print("Reducing learning rate")
+						self.lr_scheduler.step()
+						lr_red_step.append(index_epoch + 1)
+
+				checkpoint_dict = {
+					"epoch": index_epoch + 1,
+					"eval_accuracies": eval_accuracies,
+					"loss_avg_list": loss_avg_list,
+					"lr_red_step": lr_red_step
+				}
+				self.save_model(index_epoch + 1, checkpoint_dict)
+
+				if len(lr_red_step) > self.max_red_steps:
+					print("Reached maximum number of learning rate reduction steps")
+					break
+
+			with open(os.path.join(self.checkpoint_path, "results.txt"), "w") as f:
+				f.write("".join(["Epoch %i: %4.2f%%\n" % (i+1,eval_accuracies[i]*100.0) for i in range(len(eval_accuracies))]))
+				f.write("Best accuracy achieved: %4.2f%%" % (max(eval_accuracies) * 100.0))
+
+		except KeyboardInterrupt:
+			print("User keyboard interrupt detected. Saving model at step %i..." % (step_index))
 			checkpoint_dict = {
-				"epoch": index_epoch + 1,
+				"epoch": index_epoch,
+				"step_index": step_index,
+				"dataset_perm": self.train_dataset.perm_indices,
+				"dataset_exm_index": self.train_dataset.example_index,
 				"eval_accuracies": eval_accuracies,
 				"loss_avg_list": loss_avg_list,
 				"lr_red_step": lr_red_step
 			}
-			self.save_model(index_epoch + 1, checkpoint_dict)
+			self.save_model(index_epoch + 1, checkpoint_dict, step=step_index+1)
 
-			if len(lr_red_step) > self.max_red_steps:
-				print("Reached maximum number of learning rate reduction steps")
-				break
+		if writer is not None:
+			writer.close()
 
-		with open(os.path.join(self.checkpoint_path, "results.txt"), "w") as f:
-			f.write("".join(["Epoch %i: %4.2f%%\n" % (i+1,eval_accuracies[i]*100.0) for i in range(len(eval_accuracies))]))
-			f.write("Best accuracy achieved: %4.2f%%" % (max(eval_accuracies) * 100.0))
-
-
-	def load_model(self):
-		checkpoint_files = sorted(glob(os.path.join(self.checkpoint_path, "*.tar")))
-		if len(checkpoint_files) == 0:
-			return 0, list()
-		latest_checkpoint = checkpoint_files[-1]
-		print("Loading checkpoint \"" + str(latest_checkpoint) + "\"")
-		checkpoint = torch.load(latest_checkpoint)
-		self.model.load_state_dict(checkpoint['model_state_dict'])
-		self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-		self.lr_scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-		add_param_dict = dict()
-		for key, val in checkpoint.items():
-			if "state_dict" not in key:
-				add_param_dict[key] = val
-		return add_param_dict
-
-
-	def save_model(self, epoch, add_param_dict):
-		checkpoint_file = os.path.join(self.checkpoint_path, 'checkpoint_' + str(epoch).zfill(3) + ".tar")
+	def save_model(self, epoch, add_param_dict, step=None):
+		checkpoint_file = os.path.join(self.checkpoint_path, 'checkpoint_' + str(epoch).zfill(3) + ("_step_%i" % (step) if step is not None else "") + ".tar")
 		checkpoint_dict = {
 				'model_state_dict': self.model.state_dict(),
 				'optimizer_state_dict': self.optimizer.state_dict(),
@@ -151,8 +167,8 @@ class SNLITrain:
 			checkpoint_dict[key] = val
 		torch.save(checkpoint_dict, checkpoint_file)
 
-
-
+	def load_recent_model(self):
+		return load_model(self.checkpoint_path, model=self.model, optimizer=self.optimizer, lr_scheduler=self.lr_scheduler)
 
 
 
@@ -161,7 +177,7 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--cluster", help="Enable option if code is executed on cluster. Reduces output size", action="store_true")
 	parser.add_argument("-d", "--debug", help="Whether debug output should be activated or not", action="store_true")
-	parser.add_argument("--epochs", help="Maximum number of epochs to train. Default: dynamic with learning rate threshold", type=int, default=-1)
+	parser.add_argument("--epochs", help="Maximum number of epochs to train. Default: dynamic with learning rate threshold", type=int, default=50)
 	parser.add_argument("--eval_freq", help="Frequency of evaluation on validation set (in number of steps/iterations). Default: once per epoch", type=int, default=-1)
 	parser.add_argument("--batch_size", help="Batch size used during training", type=int, default=64)
 	parser.add_argument("--learning_rate", help="Learning rate of the optimizer", type=float, default=0.1)
@@ -173,8 +189,11 @@ if __name__ == '__main__':
 	parser.add_argument("--load_config", help="Tries to find parameter file in checkpoint path, and loads all given parameters from there", action="store_true")
 	parser.add_argument("--fc_dim", help="Number of hidden units in fully connected layers (classifier)", type=int, default=512)
 	parser.add_argument("--fc_dropout", help="Dropout probability in FC classifier", type=float, default=0.0)
+	parser.add_argument("--fc_nonlinear", help="Whether to add a non-linearity (tanh) between classifier layers or not", action="store_true")
 	parser.add_argument("--embed_dim", help="Embedding dimensionality of sentence", type=int, default=2048)
-	parser.add_argument("--model", help="Which encoder model to use. 0: BOW, 1: LSTM, 2: Bi-LSTM, 3: Bi-LSTM with max pooling", type=int, default=0)
+	parser.add_argument("--model", help="Which encoder model to use. 0: BOW, 1: LSTM, 2: Bi-LSTM, 3: Bi-LSTM with max pooling, 4: Bi-LSTM skip connections", type=int, default=0)
+	parser.add_argument("--tensorboard", help="Activates tensorboard support while training", action="store_true")
+	parser.add_argument("--restart", help="Does not load old checkpoints, and deletes those if checkpoint path is specified (including tensorboard file etc.)", action="store_true")
 	parser.add_argument("--seed", help="Seed to make experiments reproducable", type=int, default=42)
 
 	args = parser.parse_args()
@@ -190,46 +209,27 @@ if __name__ == '__main__':
 		if args.checkpoint_path is None:
 			print("[!] ERROR: Please specify the checkpoint path to load the config from.")
 			sys.exit(1)
-		param_file_path = os.path.join(args.checkpoint_path, PARAM_CONFIG_FILE)
-		with open(param_file_path, "rb") as f:
-			print("Loading parameter configuration from \"" + str(args.checkpoint_path) + "\"")
-			args = pickle.load(f)
-
-	# Define model parameters
-	model_params = {
-		"embed_word_dim": 300,
-		"embed_sent_dim": args.embed_dim,
-		"fc_dropout": args.fc_dropout, 
-		"fc_dim": args.fc_dim,
-		"n_classes": 3
-	}
-	if args.model == NLIModel.AVERAGE_WORD_VECS:
-		model_params["embed_sent_dim"] = 300
-
-	optimizer_params = {
-		"optimizer": args.optimizer,
-		"lr": args.learning_rate,
-		"weight_decay": args.weight_decay,
-		"lr_decay_step": args.lr_decay,
-		"lr_max_red_steps": args.lr_max_red_steps
-	}
-
-	# Set seed
-	np.random.seed(args.seed)
-	random.seed(args.seed)
-	torch.manual_seed(args.seed)
-	if torch.cuda.is_available: 
-		torch.cuda.manual_seed_all(args.seed)
+		args = load_args(args.checkpoint_path)
 
 	# Setup training
+	model_type, model_params, optimizer_params = args_to_params(args)
 	trainModule = SNLITrain(model_type=args.model, 
 							model_params=model_params,
 							optimizer_params=optimizer_params, 
 							batch_size=args.batch_size,
-							checkpoint_path=args.checkpoint_path
+							checkpoint_path=args.checkpoint_path, 
+							debug=args.debug
 							)
 
-	with open(os.path.join(trainModule.checkpoint_path, PARAM_CONFIG_FILE), "wb") as f:
+	if args.restart and args.checkpoint_path is not None and os.path.isdir(args.checkpoint_path):
+		print("Cleaning up directiory " + str(args.checkpoint_path) + "...")
+		for ext in [".tar", ".out.tfevents.*", ".txt"]:
+			for file_in_dir in sorted(glob(os.path.join(args.checkpoint_path, "*" + ext))):
+				print("Removing file " + file_in_dir)
+				os.remove(file_in_dir)
+
+	args_filename = os.path.join(trainModule.checkpoint_path, PARAM_CONFIG_FILE)
+	with open(args_filename, "wb") as f:
 		pickle.dump(args, f)
 
-	trainModule.train_model(args.epochs, loss_freq=loss_freq)
+	trainModule.train_model(args.epochs, loss_freq=loss_freq, enable_tensorboard=args.tensorboard)
