@@ -126,7 +126,7 @@ class EncoderLSTM(nn.Module):
 
 	def __init__(self, model_params):
 		super(EncoderLSTM, self).__init__()
-		self.lstm_chain = LSTMChain(input_size=model_params["embed_word_dim"], 
+		self.lstm_chain = PyTorchLSTMChain(input_size=model_params["embed_word_dim"], 
 									hidden_size=model_params["embed_sent_dim"])
 
 	def forward(self, embed_words, lengths):
@@ -138,15 +138,53 @@ class EncoderBILSTM(nn.Module):
 
 	def __init__(self, model_params):
 		super(EncoderBILSTM, self).__init__()
-		self.lstm_chain = LSTMChain(input_size=model_params["embed_word_dim"], 
-									hidden_size=int(model_params["embed_sent_dim"]/2))
+		self.lstm_chain = PyTorchLSTMChain(input_size=model_params["embed_word_dim"], 
+										   hidden_size=int(model_params["embed_sent_dim"]/2),
+										   bidirectional=True)
 
 	def forward(self, embed_words, lengths):
 		# embed words is of shape [batch_size * 2, time, word_dim]
 		final_states, _ = self.lstm_chain(embed_words, lengths)
-		# Reshape to [batch_size, sent_dim]
-		final_states = final_states.reshape(shape=[-1, 2 * final_states.shape[1]])
 		return final_states
+
+
+class EncoderBILSTMPool(nn.Module):
+
+	def __init__(self, model_params, skip_connections=False):
+		super(EncoderBILSTMPool, self).__init__()
+		self.lstm_chain = PyTorchLSTMChain(input_size=model_params["embed_word_dim"], 
+										   hidden_size=int(model_params["embed_sent_dim"]/2),
+										   bidirectional=True)
+
+	def forward(self, embed_words, lengths):
+		# embed words is of shape [batch_size * 2, time, word_dim]
+		_, outputs = self.lstm_chain(embed_words, lengths)
+		# Max time pooling
+		pooled_features = EncoderBILSTMPool.pool_over_time(outputs, lengths)
+		return pooled_features
+
+	@staticmethod
+	def pool_over_time(outputs, lengths):
+		time_dim = outputs.shape[1]
+		word_positions = torch.arange(start=0, end=time_dim, dtype=lengths.dtype, device=outputs.device)
+		mask = (word_positions.reshape(shape=[1, -1, 1]) < lengths.reshape([-1, 1, 1])).float()
+		outputs = outputs * mask + (torch.min(outputs) - 1) * (1 - mask)
+		final_states, _ = torch.max(outputs, dim=1)
+		return final_states
+
+# class EncoderBILSTM(nn.Module):
+
+# 	def __init__(self, model_params):
+# 		super(EncoderBILSTM, self).__init__()
+# 		self.lstm_chain = LSTMChain(input_size=model_params["embed_word_dim"], 
+# 									hidden_size=int(model_params["embed_sent_dim"]/2))
+
+# 	def forward(self, embed_words, lengths):
+# 		# embed words is of shape [batch_size * 2, time, word_dim]
+# 		final_states, _ = self.lstm_chain(embed_words, lengths)
+# 		# Reshape to [batch_size, sent_dim]
+# 		final_states = final_states.reshape(shape=[-1, 2 * final_states.shape[1]])
+# 		return final_states
 
 
 # class EncoderBILSTMPool(nn.Module):
@@ -174,29 +212,7 @@ class EncoderBILSTM(nn.Module):
 # 		final_states, _ = torch.max(outputs, dim=1)
 # 		return final_states
 		
-class EncoderBILSTMPool(nn.Module):
 
-	def __init__(self, model_params, skip_connections=False):
-		super(EncoderBILSTMPool, self).__init__()
-		self.lstm_chain = PyTorchLSTMChain(input_size=model_params["embed_word_dim"], 
-										   hidden_size=int(model_params["embed_sent_dim"]/2),
-										   bidirectional=True)
-
-	def forward(self, embed_words, lengths):
-		# embed words is of shape [batch_size * 2, time, word_dim]
-		_, outputs = self.lstm_chain(embed_words, lengths)
-		# Max time pooling
-		pooled_features = EncoderBILSTMPool.pool_over_time(outputs, lengths)
-		return pooled_features
-
-	@staticmethod
-	def pool_over_time(outputs, lengths):
-		time_dim = outputs.shape[1]
-		word_positions = torch.arange(start=0, end=time_dim, dtype=lengths.dtype, device=outputs.device)
-		mask = (word_positions.reshape(shape=[1, -1, 1]) < lengths.reshape([-1, 1, 1])).float()
-		outputs = outputs * mask + (torch.min(outputs) - 1) * (1 - mask)
-		final_states, _ = torch.max(outputs, dim=1)
-		return final_states
 
 
 ###################################
