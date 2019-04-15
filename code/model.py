@@ -143,7 +143,7 @@ class EncoderBILSTM(nn.Module):
 										   bidirectional=True)
 
 	def forward(self, embed_words, lengths):
-		# embed words is of shape [batch_size * 2, time, word_dim]
+		# embed words is of shape [batch_size, time, word_dim]
 		final_states, _ = self.lstm_chain(embed_words, lengths)
 		return final_states
 
@@ -298,7 +298,7 @@ class LSTMChain(nn.Module):
 		outputs = outputs.transpose(0, 1).contiguous()
 
 		# Get final hidden state per sentence
-		reshaped_outputs = outputs.view(-1, self.lstm_cell.hidden_size) # Reshape for better indexing
+		reshaped_outputs = outputs.view(-1, outputs.shape[-1] * 2) # Reshape for better indexing
 		indexes = (lengths - 1) + torch.arange(batch_size, device=word_embeds.device, dtype=lengths.dtype) * time_dim # Index of final states
 		final = reshaped_outputs[indexes,:] # Final states
 
@@ -328,7 +328,7 @@ class PyTorchLSTMChain(nn.Module):
 		_, unsort_indices = perm_index.sort(0, descending=False)
 		outputs = outputs[unsort_indices]
 
-		reshaped_outputs = outputs.view(-1, self.hidden_size) # Reshape for better indexing
+		reshaped_outputs = outputs.view(-1, outputs.shape[-1]) # Reshape for better indexing
 		# print((time_dim).dtype)
 		indexes = (lengths - 1) + torch.arange(batch_size, device=word_embeds.device, dtype=lengths.dtype) * int(time_dim) # Index of final states
 		final = reshaped_outputs[indexes.long(),:] # Final states

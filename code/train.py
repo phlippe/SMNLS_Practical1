@@ -58,7 +58,7 @@ class SNLITrain:
 		self.checkpoint_path = checkpoint_path
 
 
-	def train_model(self, epochs=50, loss_freq=50, enable_tensorboard=False):
+	def train_model(self, epochs=50, loss_freq=50, enable_tensorboard=False, intermediate_evals=False):
 
 		loss_module = nn.CrossEntropyLoss()
 		if torch.cuda.is_available():
@@ -110,6 +110,13 @@ class SNLITrain:
 						if writer is not None:
 							writer.add_scalar("train/loss", loss_avg_list[-1], num_steps * index_epoch + step_index + 1)
 						loss_avg_list.append(0)
+
+					if intermediate_evals and (step_index + 1) % 2000 == 0:
+						intermediate_acc = self.evaluater.eval()
+						self.model.train()
+						if writer is not None:
+							writer.add_scalar("eval/acc_per_step", intermediate_acc, num_steps * index_epoch + step_index + 1)
+
 				del loss_avg_list[-1]
 				start_step = 0
 
@@ -118,6 +125,8 @@ class SNLITrain:
 
 				if writer is not None:
 					writer.add_scalar("eval/acc", acc, index_epoch+1)
+					if intermediate_evals:
+						writer.add_scalar("eval/acc_per_step", acc, num_steps * (index_epoch + 1) )
 
 				if len(eval_accuracies) > 2:
 					if eval_accuracies[-1] < (eval_accuracies[-2] + eval_accuracies[-3]) / 2:
@@ -195,6 +204,7 @@ if __name__ == '__main__':
 	parser.add_argument("--model", help="Which encoder model to use. 0: BOW, 1: LSTM, 2: Bi-LSTM, 3: Bi-LSTM with max pooling, 4: Bi-LSTM skip connections", type=int, default=0)
 	parser.add_argument("--tensorboard", help="Activates tensorboard support while training", action="store_true")
 	parser.add_argument("--restart", help="Does not load old checkpoints, and deletes those if checkpoint path is specified (including tensorboard file etc.)", action="store_true")
+	parser.add_argument("--intermediate_evals", help="Whether validations should also be performed within a epoch. NO CHECKPOINTS WILL BE SAVED FOR THOSE, and the values are only saved in the tensorboard!", action="store_true")
 	parser.add_argument("--seed", help="Seed to make experiments reproducable", type=int, default=42)
 
 	args = parser.parse_args()
@@ -233,4 +243,4 @@ if __name__ == '__main__':
 	with open(args_filename, "wb") as f:
 		pickle.dump(args, f)
 
-	trainModule.train_model(args.epochs, loss_freq=loss_freq, enable_tensorboard=args.tensorboard)
+	trainModule.train_model(args.epochs, loss_freq=loss_freq, enable_tensorboard=args.tensorboard, intermediate_evals=args.intermediate_evals)
