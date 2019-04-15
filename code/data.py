@@ -143,13 +143,13 @@ class SNLIDataset:
 
 	# Data type either train, dev or test
 	def __init__(self, data_type, data_path="../snli_1.0", add_suffix=True, shuffle_data=True):
-		self.load_data(data_path, data_type)
+		if data_path is not None:
+			self.load_data(data_path, data_type)
+		else:
+			self.data_list == list()
 		self.data_type = data_type
-		self.example_index = 0
-		self.perm_indices = list(range(1,len(self.data_list)))
 		self.shuffle_data = shuffle_data
-		if self.shuffle_data:
-			shuffle(self.perm_indices)
+		self.set_data_list(self.data_list)
 
 	def load_data(self, data_path, data_type):
 		self.data_list = list()
@@ -168,6 +168,13 @@ class SNLIDataset:
 				continue
 			d = NLIData(premise = prem, hypothesis = hyp, label = lab)
 			self.data_list.append(d)
+
+	def set_data_list(self, new_data):
+		self.data_list = new_data
+		self.example_index = 0
+		self.perm_indices = list(range(1,len(self.data_list)))
+		if self.shuffle_data:
+			shuffle(self.perm_indices)
 
 	def get_word_list(self):
 		all_words = dict()
@@ -227,10 +234,13 @@ class SNLIDataset:
 			if bidirectional:
 				batch_s1.append(data.premise_vocab[::-1])
 				batch_s2.append(data.hypothesis_vocab[::-1])
+		return SNLIDataset.sents_to_Tensors([batch_s1, batch_s2], batch_labels=batch_labels, toTorch=toTorch)
 
+	@staticmethod
+	def sents_to_Tensors(batch_stacked_sents, batch_labels=None, toTorch=False):
 		lengths = []
 		embeds = []
-		for batch_sents in [batch_s1, batch_s2]:
+		for batch_sents in batch_stacked_sents:
 			lengths_sents = np.array([x.shape[0] for x in batch_sents])
 			max_len = np.max(lengths_sents)
 			sent_embeds = np.zeros((len(batch_sents), max_len), dtype=np.int32)
@@ -244,7 +254,7 @@ class SNLIDataset:
 					lengths_sents = lengths_sents.cuda()
 			lengths.append(lengths_sents)
 			embeds.append(sent_embeds)
-		if toTorch:
+		if batch_labels is not None and toTorch:
 			batch_labels = torch.LongTensor(np.array(batch_labels))
 			if torch.cuda.is_available():
 				batch_labels = batch_labels.cuda()
