@@ -26,15 +26,16 @@ def create_model(checkpoint_path, model_type, model_params):
 	return model
 
 # SentEval prepare and batcher
+UNKNOWN_WORDS = dict()
 def prepare(params, samples):
+	global UNKNOWN_WORDS
 	_, _, _, _, word2id, _ = load_SNLI_datasets(debug_dataset = True)
 	params.word2id = word2id
 	words = ' '.join([' '.join(s).lower() for s in samples]).split(" ")
-	unknown_words = dict()
 	for w in words:
 		if w not in word2id:
-			unknown_words[w] = ''
-	print("Number of unknown words: " + str(len(unknown_words.keys())))
+			UNKNOWN_WORDS[w] = ''
+	print("Number of unknown words: " + str(len(UNKNOWN_WORDS.keys())))
 	return
 
 def batcher(params, batch):
@@ -84,4 +85,6 @@ if __name__ == "__main__":
 	model = create_model(args.checkpoint_path, model_type, model_params)
 	perform_SentEval(model)
 
+	with open("senteval_unknown_words.txt", "w") as f:
+		f.write("\n".join(list(UNKNOWN_WORDS.keys())))
 

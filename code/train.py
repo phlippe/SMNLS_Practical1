@@ -45,6 +45,7 @@ class SNLITrain:
 			print("[!] ERROR: Unknown optimizer: " + str(optimizer_params["optimizer"]))
 			sys.exit(1)
 		self.lr_scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 1, gamma=optimizer_params["lr_decay_step"])
+		self.lr_scheduler.step() # The first step is not recognized...
 		self.max_red_steps = optimizer_params["lr_max_red_steps"]
 
 
