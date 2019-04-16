@@ -108,7 +108,16 @@ class NLIClassifier(nn.Module):
 ## ENCODER MODELS ##
 ####################
 
-class EncoderBOW(nn.Module):
+class EncoderModule(nn.Module):
+
+	def __init__(self):
+		super(EncoderModule, self).__init__()
+
+	def forward(self, embed_words, lengths):
+		raise NotImplementedError
+
+
+class EncoderBOW(EncoderModule):
 
 	def __init__(self):
 		super(EncoderBOW, self).__init__()
@@ -122,7 +131,7 @@ class EncoderBOW(nn.Module):
 		return out
 
 
-class EncoderLSTM(nn.Module):
+class EncoderLSTM(EncoderModule):
 
 	def __init__(self, model_params):
 		super(EncoderLSTM, self).__init__()
@@ -134,7 +143,7 @@ class EncoderLSTM(nn.Module):
 		return final_states
 
 
-class EncoderBILSTM(nn.Module):
+class EncoderBILSTM(EncoderModule):
 
 	def __init__(self, model_params):
 		super(EncoderBILSTM, self).__init__()
@@ -148,7 +157,7 @@ class EncoderBILSTM(nn.Module):
 		return final_states
 
 
-class EncoderBILSTMPool(nn.Module):
+class EncoderBILSTMPool(EncoderModule):
 
 	def __init__(self, model_params, skip_connections=False):
 		super(EncoderBILSTMPool, self).__init__()

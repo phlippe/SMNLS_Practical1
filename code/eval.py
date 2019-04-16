@@ -3,6 +3,7 @@ import torch.nn
 import argparse
 import math
 import os
+import sys
 from glob import glob
 
 from model import NLIModel
@@ -47,14 +48,14 @@ class SNLIEval:
 		final_dict = load_model(checkpoint_path)
 		max_acc = max(final_dict["eval_accuracies"])
 		best_epoch = final_dict["eval_accuracies"].index(max_acc) + 1
-		print("Best epoch: " + str(best_epoch))
+		print("Best epoch: " + str(best_epoch) + " with accuracy %4.2f%%" % (max_acc * 100.0))
 
 		load_model(os.path.join(checkpoint_path, "checkpoint_" + str(best_epoch).zfill(3) + ".tar"), model=self.model)
 		if run_training_set:
 			train_acc = self.eval(dataset=self.train_dataset)
 		val_acc = self.eval(dataset=self.val_dataset)
 		test_acc = self.eval(dataset=self.test_dataset)
-		if val_acc != max_acc / 100.0:
+		if val_acc != max_acc:
 			print("[!] ERROR: Found different accuracy then reported in the final state dict")
 			sys.exit(1)
 		if run_training_set:
@@ -95,7 +96,7 @@ class SNLIEval:
 		return model_results, best_acc
 
 
-	def visualize_tensorboard(self, checkpoint_path, optimizer_params=None, replace_old_files=True):
+	def visualize_tensorboard(self, checkpoint_path, optimizer_params=None, replace_old_files=False):
 		if replace_old_files:
 			for old_tf_file in sorted(glob(os.path.join(checkpoint_path, "events.out.tfevents.*"))):
 				print("Removing " + old_tf_file + "...")
@@ -121,7 +122,7 @@ class SNLIEval:
 				if epoch in final_dict["lr_red_step"]:
 					lr *= lr_decay_step
 
-		model_results, best_acc = evaluate_all_models(checkpoint_path)
+		model_results, best_acc = self.evaluate_all_models(checkpoint_path)
 		for epoch, result_dict in model_results.items():
 			for data in ["train", "val", "test"]:
 				writer.add_scalar("eval/" + data + "_accuracy", result_dict[data], epoch+1)
@@ -142,5 +143,5 @@ if __name__ == '__main__':
 
 	evaluater = SNLIEval(model)
 	# evaluater.evaluate_all_models(args.checkpoint_path)
-	# evaluater.test_best_model(args.checkpoint_path)
-	evaluater.visualize_tensorboard(args.checkpoint_path, optimizer_params=optimizer_params)
+	evaluater.test_best_model(args.checkpoint_path)
+	# evaluater.visualize_tensorboard(args.checkpoint_path, optimizer_params=optimizer_params)
