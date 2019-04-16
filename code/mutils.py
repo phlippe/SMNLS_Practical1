@@ -24,7 +24,10 @@ def load_model(checkpoint_path, model=None, optimizer=None, lr_scheduler=None):
 			return dict()
 		checkpoint_path = checkpoint_files[-1]
 	print("Loading checkpoint \"" + str(checkpoint_path) + "\"")
-	checkpoint = torch.load(checkpoint_path)
+	if torch.cuda.is_available():
+		checkpoint = torch.load(checkpoint_path)
+	else:
+		checkpoint = torch.load(checkpoint_path, map_location='cpu')
 	if model is not None:
 		model.load_state_dict(checkpoint['model_state_dict'])
 	if optimizer is not None:

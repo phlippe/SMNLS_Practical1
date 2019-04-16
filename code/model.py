@@ -48,7 +48,7 @@ class NLIModel(nn.Module):
 		# If only one element is given, we assume that the first one must be a tuple of all inputs
 		# Required for e.g. graph creation in tensorboard
 		if lengths_s1 is None:
-			words_s1, lengths_s1, words_s2, lengths_s2 = words_s1
+			words_s1, lengths_s1, words_s2, lengths_s2 = words_s1[0][0], words_s1[0][1], words_s1[1][0], words_s1[1][1]
 
 		# Input must be [batch, time]
 		embed_words_s1 = self.embeddings(words_s1)

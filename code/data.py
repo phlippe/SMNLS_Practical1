@@ -164,18 +164,77 @@ def load_SNLI_datasets(debug_dataset=False):
 	return SNLI_TRAIN_DATASET, SNLI_VAL_DATASET, SNLI_TEST_DATASET, SNLI_WORD2VEC, SNLI_WORD2ID, SNLI_WORDVEC_TENSOR
 
 
+###############################
+## Dataset class definitions ##
+###############################
 
-class SNLIDataset:
+class DatasetTemplate:
+
+	def __init__(self, data_type="train", shuffle_data=True):
+		self.data_type = data_type
+		self.shuffle_data = shuffle_data
+		self.set_data_list(list())
+
+	def set_data_list(self, new_data):
+		self.data_list = new_data
+		self.example_index = 0
+		self.perm_indices = list(range(1,len(self.data_list)))
+		if self.shuffle_data:
+			shuffle(self.perm_indices)
+
+	def _get_next_example(self):
+		exmp = self.data_list[self.perm_indices[self.example_index]]
+		self.example_index += 1
+		if self.example_index >= len(self.perm_indices):
+			if self.shuffle_data:
+				shuffle(self.perm_indices)
+			self.example_index = 0
+		return exmp
+
+	@staticmethod
+	def sents_to_Tensors(batch_stacked_sents, batch_labels=None, toTorch=False):
+		lengths = []
+		embeds = []
+		for batch_sents in batch_stacked_sents:
+			lengths_sents = np.array([x.shape[0] for x in batch_sents])
+			max_len = np.max(lengths_sents)
+			sent_embeds = np.zeros((len(batch_sents), max_len), dtype=np.int32)
+			for s_index, sent in enumerate(batch_sents):
+				sent_embeds[s_index, :sent.shape[0]] = sent
+			if toTorch:
+				sent_embeds = torch.LongTensor(sent_embeds)
+				lengths_sents = torch.LongTensor(lengths_sents)
+				if torch.cuda.is_available():
+					sent_embeds = sent_embeds.cuda()
+					lengths_sents = lengths_sents.cuda()
+			lengths.append(lengths_sents)
+			embeds.append(sent_embeds)
+		if batch_labels is not None and toTorch:
+			batch_labels = torch.LongTensor(np.array(batch_labels))
+			if torch.cuda.is_available():
+				batch_labels = batch_labels.cuda()
+		return embeds, lengths, batch_labels
+
+	def get_num_examples(self):
+		return len(self.data_list)
+
+	def get_batch(self, batch_size):
+		raise NotImplementedError
+
+	def get_num_classes(self):
+		raise NotImplementedError
+
+
+class SNLIDataset(DatasetTemplate):
 
 	# Data type either train, dev or test
 	def __init__(self, data_type, data_path="../snli_1.0", add_suffix=True, shuffle_data=True):
+		super(SNLIDataset, self).__init__(data_type, shuffle_data)
 		if data_path is not None:
 			self.load_data(data_path, data_type)
 		else:
 			self.data_list == list()
-		self.data_type = data_type
-		self.shuffle_data = shuffle_data
-		self.set_data_list(self.data_list)
+		super().set_data_list(self.data_list)
 
 	def load_data(self, data_path, data_type):
 		self.data_list = list()
@@ -194,13 +253,6 @@ class SNLIDataset:
 				continue
 			d = NLIData(premise = prem, hypothesis = hyp, label = lab)
 			self.data_list.append(d)
-
-	def set_data_list(self, new_data):
-		self.data_list = new_data
-		self.example_index = 0
-		self.perm_indices = list(range(1,len(self.data_list)))
-		if self.shuffle_data:
-			shuffle(self.perm_indices)
 
 	def get_word_list(self):
 		all_words = dict()
@@ -236,15 +288,6 @@ class SNLIDataset:
 		print("Number of invalid examples: " + str(self.num_invalids))
 		print("="*50)
 
-	def _get_next_example(self):
-		exmp = self.data_list[self.perm_indices[self.example_index]]
-		self.example_index += 1
-		if self.example_index >= len(self.perm_indices):
-			if self.shuffle_data:
-				shuffle(self.perm_indices)
-			self.example_index = 0
-		return exmp
-
 	def get_batch(self, batch_size, loop_dataset=True, toTorch=False, bidirectional=False):
 		# Output sentences with dimensions (bsize, max_len)
 		if not loop_dataset:
@@ -260,34 +303,7 @@ class SNLIDataset:
 			if bidirectional:
 				batch_s1.append(data.premise_vocab[::-1])
 				batch_s2.append(data.hypothesis_vocab[::-1])
-		return SNLIDataset.sents_to_Tensors([batch_s1, batch_s2], batch_labels=batch_labels, toTorch=toTorch)
-
-	@staticmethod
-	def sents_to_Tensors(batch_stacked_sents, batch_labels=None, toTorch=False):
-		lengths = []
-		embeds = []
-		for batch_sents in batch_stacked_sents:
-			lengths_sents = np.array([x.shape[0] for x in batch_sents])
-			max_len = np.max(lengths_sents)
-			sent_embeds = np.zeros((len(batch_sents), max_len), dtype=np.int32)
-			for s_index, sent in enumerate(batch_sents):
-				sent_embeds[s_index, :sent.shape[0]] = sent
-			if toTorch:
-				sent_embeds = torch.LongTensor(sent_embeds)
-				lengths_sents = torch.LongTensor(lengths_sents)
-				if torch.cuda.is_available():
-					sent_embeds = sent_embeds.cuda()
-					lengths_sents = lengths_sents.cuda()
-			lengths.append(lengths_sents)
-			embeds.append(sent_embeds)
-		if batch_labels is not None and toTorch:
-			batch_labels = torch.LongTensor(np.array(batch_labels))
-			if torch.cuda.is_available():
-				batch_labels = batch_labels.cuda()
-		return embeds, lengths, batch_labels
-
-	def get_num_examples(self):
-		return len(self.data_list)
+		return DatasetTemplate.sents_to_Tensors([batch_s1, batch_s2], batch_labels=batch_labels, toTorch=toTorch)
 
 	def get_num_classes(self):
 		c = 0
