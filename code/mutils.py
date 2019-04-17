@@ -71,7 +71,8 @@ def args_to_params(args):
 		"lr": args.learning_rate,
 		"weight_decay": args.weight_decay,
 		"lr_decay_step": args.lr_decay,
-		"lr_max_red_steps": args.lr_max_red_steps
+		"lr_max_red_steps": args.lr_max_red_steps,
+		"momentum": args.momentum if hasattr(args, "momentum") else 0.0
 	}
 
 	# Set seed

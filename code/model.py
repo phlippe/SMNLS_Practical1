@@ -44,18 +44,18 @@ class NLIModel(nn.Module):
 			sys.exit(1)
 
 
-	def forward(self, words_s1, lengths_s1=None, words_s2=None, lengths_s2=None, applySoftmax=False):
+	def forward(self, words_s1, lengths_s1=None, words_s2=None, lengths_s2=None, dummy_input=False, applySoftmax=False):
 		# If only one element is given, we assume that the first one must be a tuple of all inputs
 		# Required for e.g. graph creation in tensorboard
 		if lengths_s1 is None:
-			words_s1, lengths_s1, words_s2, lengths_s2 = words_s1[0][0], words_s1[0][1], words_s1[1][0], words_s1[1][1]
+			words_s1, lengths_s1, words_s2, lengths_s2 = words_s1[0][0], words_s1[1][0], words_s1[0][1], words_s1[1][1]
 
 		# Input must be [batch, time]
 		embed_words_s1 = self.embeddings(words_s1)
 		embed_words_s2 = self.embeddings(words_s2)
 
-		embed_s1 = self.encoder(embed_words_s1, lengths_s1)
-		embed_s2 = self.encoder(embed_words_s2, lengths_s2)
+		embed_s1 = self.encoder(embed_words_s1, lengths_s1, dummy_input=dummy_input)
+		embed_s2 = self.encoder(embed_words_s2, lengths_s2, dummy_input=dummy_input)
 
 		out = self.classifier(embed_s1, embed_s2, applySoftmax=applySoftmax)
 		return out
@@ -113,7 +113,7 @@ class EncoderModule(nn.Module):
 	def __init__(self):
 		super(EncoderModule, self).__init__()
 
-	def forward(self, embed_words, lengths):
+	def forward(self, embed_words, lengths, dummy_input=False):
 		raise NotImplementedError
 
 
@@ -122,7 +122,7 @@ class EncoderBOW(EncoderModule):
 	def __init__(self):
 		super(EncoderBOW, self).__init__()
 
-	def forward(self, embed_words, lengths):
+	def forward(self, embed_words, lengths, dummy_input=False):
 		# Embeds are of shape [batch, time, embed_dim]
 		# Lengths is of shape [batch]
 		word_positions = torch.arange(start=0, end=embed_words.shape[1], dtype=lengths.dtype, device=embed_words.device)
@@ -138,8 +138,8 @@ class EncoderLSTM(EncoderModule):
 		self.lstm_chain = PyTorchLSTMChain(input_size=model_params["embed_word_dim"], 
 									hidden_size=model_params["embed_sent_dim"])
 
-	def forward(self, embed_words, lengths):
-		final_states, _ = self.lstm_chain(embed_words, lengths)
+	def forward(self, embed_words, lengths, dummy_input=False):
+		final_states, _ = self.lstm_chain(embed_words, lengths, dummy_input=dummy_input)
 		return final_states
 
 
@@ -151,9 +151,9 @@ class EncoderBILSTM(EncoderModule):
 										   hidden_size=int(model_params["embed_sent_dim"]/2),
 										   bidirectional=True)
 
-	def forward(self, embed_words, lengths):
+	def forward(self, embed_words, lengths, dummy_input=False):
 		# embed words is of shape [batch_size, time, word_dim]
-		final_states, _ = self.lstm_chain(embed_words, lengths)
+		final_states, _ = self.lstm_chain(embed_words, lengths, dummy_input=dummy_input)
 		return final_states
 
 
@@ -165,9 +165,9 @@ class EncoderBILSTMPool(EncoderModule):
 										   hidden_size=int(model_params["embed_sent_dim"]/2),
 										   bidirectional=True)
 
-	def forward(self, embed_words, lengths):
+	def forward(self, embed_words, lengths, dummy_input=False):
 		# embed words is of shape [batch_size * 2, time, word_dim]
-		_, outputs = self.lstm_chain(embed_words, lengths)
+		_, outputs = self.lstm_chain(embed_words, lengths, dummy_input=dummy_input)
 		# Max time pooling
 		pooled_features = EncoderBILSTMPool.pool_over_time(outputs, lengths)
 		return pooled_features
@@ -321,10 +321,16 @@ class PyTorchLSTMChain(nn.Module):
 		self.lstm_cell = nn.LSTM(input_size, hidden_size, bidirectional=bidirectional)
 		self.hidden_size = hidden_size
 
-	def forward(self, word_embeds, lengths):
+	def forward(self, word_embeds, lengths, dummy_input=False):
 		batch_size = word_embeds.shape[0]
 		time_dim = word_embeds.shape[1]
 		embed_dim = word_embeds.shape[2]
+
+		# For graph creation: dummy function 
+		if dummy_input:
+			outputs, (final, _) = self.lstm_cell(word_embeds)
+			return final, outputs
+
 
 		sorted_lengths, perm_index = lengths.sort(0, descending=True)
 		word_embeds = word_embeds[perm_index]

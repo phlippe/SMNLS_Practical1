@@ -12,6 +12,8 @@ import pickle
 from glob import glob
 
 from tensorboardX import SummaryWriter
+from visualdl import LogWriter
+from torchviz import make_dot
 
 from eval import SNLIEval
 from model import NLIModel
@@ -73,7 +75,8 @@ class SNLITrain:
 		if start_step != 0:
 			self.train_dataset.perm_indices = get_dict_val(checkpoint_dict, "dataset_perm", [])
 			self.train_dataset.example_index = get_dict_val(checkpoint_dict, "dataset_exm_index", 0)
-
+		intermediate_accs = dict()
+		
 		if enable_tensorboard:
 			writer = SummaryWriter(self.checkpoint_path)
 		else:
@@ -85,7 +88,8 @@ class SNLITrain:
 
 				if writer is not None:
 					writer.add_scalar("train/learning_rate", self.optimizer.param_groups[0]['lr'], index_epoch+1)
-
+				if intermediate_evals:
+					intermediate_accs[index_epoch] = list()
 				self.model.train()
 				num_steps = int(math.ceil(self.train_dataset.get_num_examples() * 1.0 / self.batch_size))
 				if start_step == 0:
@@ -101,7 +105,15 @@ class SNLITrain:
 					self.optimizer.step()
 
 					# if index_epoch == 0 and step_index == 0 and writer is not None:
-					# 	writer.add_graph(self.model.cpu(), (embeds[0].cpu(), lengths[0].cpu().int(), embeds[1].cpu(), lengths[1].cpu().int()), operator_export_type="ONNX")
+					# 	param_dict = dict()
+					# 	for p in self.model.parameters():
+					# 		if p.requires_grad:
+					# 		 	print(p.name, p.data)
+					# 		 	param_dict[p.name] = p
+					# 	make_dot(loss, param_dict)
+					# 	# dummy_input = (embeds[0], lengths[0], embeds[1], lengths[1], True, False)
+					# 	# torch.onnx.export(self.model, dummy_input, "test_graph.onnx")
+					# 	# writer.add_graph(self.model.cpu(), (embeds[0].cpu(), lengths[0].cpu().int(), embeds[1].cpu(), lengths[1].cpu().int()), operator_export_type="ONNX")
 
 					loss_avg_list[-1] += loss.item()
 					if (step_index + 1) % loss_freq == 0:
@@ -113,6 +125,7 @@ class SNLITrain:
 
 					if intermediate_evals and (step_index + 1) % 2000 == 0:
 						intermediate_acc = self.evaluater.eval()
+						intermediate_accs[index_epoch].append(intermediate_acc)
 						self.model.train()
 						if writer is not None:
 							writer.add_scalar("eval/acc_per_step", intermediate_acc, num_steps * index_epoch + step_index + 1)
@@ -129,7 +142,8 @@ class SNLITrain:
 						writer.add_scalar("eval/acc_per_step", acc, num_steps * (index_epoch + 1) )
 
 				if len(eval_accuracies) > 2:
-					if eval_accuracies[-1] < (eval_accuracies[-2] + eval_accuracies[-3]) / 2:
+					if (not intermediate_evals and eval_accuracies[-1] < (eval_accuracies[-2] + eval_accuracies[-3]) / 2) or \
+					   (intermediate_evals and sum(intermediate_accs[index_epoch]) < sum(intermediate_accs[index_epoch-2])):
 						print("Reducing learning rate")
 						self.lr_scheduler.step()
 						lr_red_step.append(index_epoch + 1)
@@ -195,6 +209,7 @@ if __name__ == '__main__':
 	parser.add_argument("--lr_max_red_steps", help="Maximum number of times learning rate should be decreased before terminating", type=int, default=4)
 	parser.add_argument("--weight_decay", help="Weight decay of the SGD optimizer", type=float, default=1e-2)
 	parser.add_argument("--optimizer", help="Which optimizer to use. 0: SGD, 1: Adam", type=int, default=0)
+	parser.add_argument("--momentum", help="Apply momentum to SGD optimizer", type=float, default=0.0)
 	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints should be saved", type=str, default=None)
 	parser.add_argument("--load_config", help="Tries to find parameter file in checkpoint path, and loads all given parameters from there", action="store_true")
 	parser.add_argument("--fc_dim", help="Number of hidden units in fully connected layers (classifier)", type=int, default=512)
