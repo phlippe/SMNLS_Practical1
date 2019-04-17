@@ -8,7 +8,7 @@ from glob import glob
 
 from model import NLIModel
 from data import load_SNLI_datasets, debug_level
-from mutils import load_model, load_args, args_to_params
+from mutils import load_model, load_model_from_args, load_args, args_to_params
 
 from tensorboardX import SummaryWriter
 
@@ -130,17 +130,11 @@ class SNLIEval:
 		writer.close()
 
 
-
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints should be saved", type=str)
+	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints are saved", type=str, required=True)
 	args = parser.parse_args()
-
-	model_type, model_params, optimizer_params = args_to_params(load_args(args.checkpoint_path))
-
-	_, _, _, _, _, wordvec_tensor = load_SNLI_datasets(debug_dataset = True)
-	model = NLIModel(model_type, model_params, wordvec_tensor)
-
+	model = load_model_from_args(load_args(args.checkpoint_path))
 	evaluater = SNLIEval(model)
 	# evaluater.evaluate_all_models(args.checkpoint_path)
 	evaluater.test_best_model(args.checkpoint_path)

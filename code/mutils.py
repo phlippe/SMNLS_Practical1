@@ -40,6 +40,13 @@ def load_model(checkpoint_path, model=None, optimizer=None, lr_scheduler=None):
 			add_param_dict[key] = val
 	return add_param_dict
 
+def load_model_from_args(args, checkpoint_path=None):
+	model_type, model_params, optimizer_params = args_to_params(args)
+	_, _, _, _, _, wordvec_tensor = load_SNLI_datasets(debug_dataset = True)
+	model = NLIModel(model_type, model_params, wordvec_tensor)
+	if checkpoint_path is not None:
+		load_model(checkpoint_path, model=model)
+	return model
 
 def load_args(checkpoint_path):
 	if os.path.isfile(checkpoint_path):
@@ -89,3 +96,22 @@ def get_dict_val(checkpoint_dict, key, default_val):
 		return checkpoint_dict[key]
 	else:
 		return default_val
+
+def visualize_tSNE(model, dataset, tensorboard_writer, batch_size=64, embedding_name='default', global_step=None):
+
+	number_batches = int(math.ceil(dataset.get_num_examples()/batch_size))
+	data_embed_list = list()
+	label_list = list()
+	for _ in range(number_batches):
+		embeds, lengths, labels = dataset.get_batch(batch_size=batch_size, loop_dataset=False, toTorch=True)
+		embeds = embeds[0] if isinstance(embeds, list) else embeds 
+		lengths = lengths[0] if isinstance(lengths, list) else lengths
+		sent_embeds = model.encode_sentence(embeds, lengths)
+		data_embed_list.append(sent_embeds)
+		label_list.append(labels)
+	final_embeddings = torch.cat(data_embed_list, dim=0)
+	final_labels = torch.cat(label_list, dim=0)
+	tensorboard_writer.add_embedding(final_embeddings, metadata=final_labels, tag=embedding_name, global_step=global_step)
+
+
+

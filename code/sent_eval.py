@@ -9,7 +9,8 @@ from glob import glob
 
 from model import NLIModel
 from data import load_SNLI_datasets, debug_level, NLIData, SNLIDataset
-from mutils import load_model, load_args, args_to_params
+from mutils import load_model, load_model_from_args, load_args, args_to_params
+from eval import get_user_chosen_model
 
 # Sent initials for SentEval
 PATH_TO_SENTEVAL = "../../SentEval"
@@ -42,14 +43,13 @@ def batcher(params, batch):
 	global MODEL
 	data_batch = list()
 	for sent in batch:
-		new_d = NLIData(premise=" ".join(sent), hypothesis='.', label='-')
+		new_d = NLIData(premise=" ".join(sent), hypothesis='.', label=-1)
 		new_d.translate_to_dict(params.word2id)
 		data_batch.append(new_d)
 	sents, lengths, _ = SNLIDataset.sents_to_Tensors([[d.premise_vocab for d in data_batch]], toTorch=True)
 	
-	embed_words = MODEL.embeddings(sents[0])
-	embeddings = MODEL.encoder(embed_words, lengths[0])
-	return embeddings.cpu()
+	sent_embeddings = MODEL.encode_sentence(sents[0], lengths[0])
+	return sent_embeddings.cpu()
 
 def perform_SentEval(model):
 	global MODEL 
@@ -76,13 +76,13 @@ def perform_SentEval(model):
 
 
 if __name__ == "__main__":
-	# Prepare argument parser
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints should be saved", type=str)
+	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints are saved", type=str, required=True)
 	args = parser.parse_args()
+	model = load_model_from_args(load_args(args.checkpoint_path), args.checkpoint_path)
+	for param in model.parameters():
+		param.requires_grad = False
 
-	model_type, model_params, _ = args_to_params(load_args(args.checkpoint_path))
-	model = create_model(args.checkpoint_path, model_type, model_params)
 	perform_SentEval(model)
 
 	with open("senteval_unknown_words.txt", "w") as f:

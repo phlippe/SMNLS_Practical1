@@ -51,16 +51,18 @@ class NLIModel(nn.Module):
 			words_s1, lengths_s1, words_s2, lengths_s2 = words_s1[0][0], words_s1[1][0], words_s1[0][1], words_s1[1][1]
 
 		# Input must be [batch, time]
-		embed_words_s1 = self.embeddings(words_s1)
-		embed_words_s2 = self.embeddings(words_s2)
-
-		embed_s1 = self.encoder(embed_words_s1, lengths_s1, dummy_input=dummy_input)
-		embed_s2 = self.encoder(embed_words_s2, lengths_s2, dummy_input=dummy_input)
+		embed_s1 = self.encode_sentence(words_s1, lengths_s1, dummy_input=dummy_input)
+		embed_s2 = self.encode_sentence(words_s2, lengths_s2, dummy_input=dummy_input)
 
 		out = self.classifier(embed_s1, embed_s2, applySoftmax=applySoftmax)
 		return out
 
+	def encode_sentence(self, words, lengths, dummy_input=False):
+		word_embeds = self.embeddings(words)
+		sent_embeds = self.encoder(word_embeds, lengths, dummy_input=dummy_input)
+		return sent_embeds
 
+	# TODO: REMOVE FUNCTION
 	def is_bidirectional(self):
 		if self.model_type in [NLIModel.BILSTM, NLIModel.BILSTM_MAX]:
 			return False

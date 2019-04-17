@@ -178,7 +178,7 @@ class DatasetTemplate:
 	def set_data_list(self, new_data):
 		self.data_list = new_data
 		self.example_index = 0
-		self.perm_indices = list(range(1,len(self.data_list)))
+		self.perm_indices = list(range(len(self.data_list)))
 		if self.shuffle_data:
 			shuffle(self.perm_indices)
 
@@ -218,8 +218,18 @@ class DatasetTemplate:
 	def get_num_examples(self):
 		return len(self.data_list)
 
-	def get_batch(self, batch_size):
-		raise NotImplementedError
+	def get_batch(self, batch_size, loop_dataset=True, toTorch=False):
+		# Default: assume that dataset entries contain object of SentData
+		if not loop_dataset:
+			batch_size = min(batch_size, len(self.perm_indices) - self.example_index)
+		batch_sents = []
+		batch_labels = []
+		for _ in range(batch_size):
+			data = self._get_next_example()
+			batch_sents.append(data.sent_vocab)
+			batch_labels.append(data.label)
+		embeds, lengths, labels = DatasetTemplate.sents_to_Tensors([batch_sents], batch_labels=batch_labels, toTorch=toTorch)
+		return (embeds[0], lengths[0], labels)
 
 	def get_num_classes(self):
 		raise NotImplementedError
@@ -323,27 +333,66 @@ class NLIData:
 	}
 
 	def __init__(self, premise, hypothesis, label):
-		self.premise_words = self._preprocess_sentence(premise)
-		self.hypothesis_words = self._preprocess_sentence(hypothesis)
+		self.premise_words = SentData._preprocess_sentence(premise)
+		self.hypothesis_words = SentData._preprocess_sentence(hypothesis)
 		self.premise_vocab = None
 		self.hypothesis_vocab = None
 		self.label = label
 
 	def translate_to_dict(self, word_dict):
-		self.premise_vocab = self._sentence_to_dict(word_dict, self.premise_words)
-		self.hypothesis_vocab = self._sentence_to_dict(word_dict, self.hypothesis_words)
+		self.premise_vocab = SentData._sentence_to_dict(word_dict, self.premise_words)
+		self.hypothesis_vocab = SentData._sentence_to_dict(word_dict, self.hypothesis_words)
 
-	def _preprocess_sentence(self, sent):
-		sent_words = sent.lower().split(" ") 
+	def number_words_not_in_dict(self, word_dict):
+		missing_words = 0
+		for w in (self.premise_words + self.hypothesis_words):
+			if w not in word_dict:
+				missing_words += 1
+		return missing_words, (len(self.premise_words) + len(self.hypothesis_words))
+		
+	def get_data(self):
+		return self.premise_vocab, self.hypothesis_vocab, self.label
+
+	def get_premise(self):
+		return " ".join(self.premise_words)
+
+	def get_hypothesis(self):
+		return " ".join(self.hypothesis_words)
+
+	@staticmethod
+	def label_to_string(label):
+		for key, val in NLIData.LABEL_LIST.items():
+			if val == label:
+				return key
+
+
+class SentData:
+
+	def __init__(self, sentence, label=None):
+		self.sent_words = SentData._preprocess_sentence(sentence)
+		self.sent_vocab = None
+		self.label = label
+
+	def translate_to_dict(self, word_dict):
+		self.sent_vocab = SentData._sentence_to_dict(word_dict, self.sent_words)
+
+	@staticmethod
+	def _preprocess_sentence(sent):
+		sent_words = list(sent.lower().strip().split(" "))
+		if "." in sent_words[-1] and len(sent_words[-1]) > 1:
+			sent_words[-1] = sent_words[-1].replace(".","")
+			sent_words.append(".")
+		sent_words = [w for w in sent_words if len(w) > 0]
 		for i in range(len(sent_words)):
 			if len(sent_words[i]) > 1 and "." in sent_words[i]:
 				sent_words[i] = sent_words[i].replace(".","")
 		return sent_words
 
-	def _sentence_to_dict(self, word_dict, sent):
+	@staticmethod
+	def _sentence_to_dict(word_dict, sent):
 		vocab_words = list()
 		vocab_words += [word_dict['<s>']]
-		vocab_words += NLIData._word_seq_to_dict(sent, word_dict)
+		vocab_words += SentData._word_seq_to_dict(sent, word_dict)
 		vocab_words += [word_dict['</s>']]
 		vocab_words = np.array(vocab_words, dtype=np.int32)
 		return vocab_words
@@ -357,25 +406,14 @@ class NLIData:
 			if w in word_dict:
 				vocab_words.append(word_dict[w])
 			elif "-" in w:
-				vocab_words += NLIData._word_seq_to_dict(w.split("-"), word_dict)
+				vocab_words += SentData._word_seq_to_dict(w.split("-"), word_dict)
 			elif "/" in w:
-				vocab_words += NLIData._word_seq_to_dict(w.split("/"), word_dict)
+				vocab_words += SentData._word_seq_to_dict(w.split("/"), word_dict)
 			else:
 				subword = re.sub('\W+','', w)
 				if subword in word_dict:
 					vocab_words.append(word_dict[subword])
 		return vocab_words
-
-	def number_words_not_in_dict(self, word_dict):
-		missing_words = 0
-		for w in (self.premise_words + self.hypothesis_words):
-			if w not in word_dict:
-				missing_words += 1
-		return missing_words, (len(self.premise_words) + len(self.hypothesis_words))
-
-		
-	def get_data(self):
-		return premise_vocab, hypothesis_vocab, label
 
 
 if __name__ == '__main__':
