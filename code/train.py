@@ -39,7 +39,8 @@ class SNLITrain:
 		if optimizer_params["optimizer"] == SNLITrain.OPTIMIZER_SGD:
 			self.optimizer = torch.optim.SGD(self.model.parameters(), 
 											 lr=optimizer_params["lr"], 
-											 weight_decay=optimizer_params["weight_decay"])
+											 weight_decay=optimizer_params["weight_decay"],
+											 momentum=optimizer_params["momentum"])
 		elif optimizer_params["optimizer"] == SNLITrain.OPTIMIZER_ADAM:
 			self.optimizer = torch.optim.Adam(self.model.parameters(), 
 											  lr=optimizer_params["lr"])
