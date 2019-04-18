@@ -12,8 +12,8 @@ import pickle
 from glob import glob
 
 from tensorboardX import SummaryWriter
-from visualdl import LogWriter
-from torchviz import make_dot
+# from visualdl import LogWriter
+# from torchviz import make_dot
 
 from eval import SNLIEval
 from model import NLIModel

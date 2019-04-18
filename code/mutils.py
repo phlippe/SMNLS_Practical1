@@ -10,6 +10,7 @@ import sys
 import json
 import pickle
 from glob import glob
+from shutil import copyfile
 
 from model import NLIModel
 from data import load_SNLI_datasets, debug_level, set_debug_level
@@ -42,7 +43,7 @@ def load_model(checkpoint_path, model=None, optimizer=None, lr_scheduler=None):
 
 def load_model_from_args(args, checkpoint_path=None):
 	model_type, model_params, optimizer_params = args_to_params(args)
-	_, _, _, _, _, wordvec_tensor = load_SNLI_datasets(debug_dataset = True)
+	_, _, _, _, _, wordvec_tensor = load_SNLI_datasets(debug_dataset = False)
 	model = NLIModel(model_type, model_params, wordvec_tensor)
 	if checkpoint_path is not None:
 		load_model(checkpoint_path, model=model)
@@ -88,6 +89,8 @@ def args_to_params(args):
 	torch.manual_seed(args.seed)
 	if torch.cuda.is_available: 
 		torch.cuda.manual_seed_all(args.seed)
+	torch.backends.cudnn.deterministic = True
+	torch.backends.cudnn.benchmark = False	
 
 	return args.model, model_params, optimizer_params
 
@@ -113,5 +116,33 @@ def visualize_tSNE(model, dataset, tensorboard_writer, batch_size=64, embedding_
 	final_labels = torch.cat(label_list, dim=0)
 	tensorboard_writer.add_embedding(final_embeddings, metadata=final_labels, tag=embedding_name, global_step=global_step)
 
-
-
+def copy_results():
+	checkpoint_folder = sorted(glob("checkpoints/*"))
+	for check_dir in checkpoint_folder:
+		if os.path.isfile(os.path.join(check_dir, "evaluation.txt")):
+			result_folder = os.path.join("results/", check_dir.split("/")[-1])
+			if not os.path.exists(result_folder):
+				os.makedirs(result_folder)
+			for file_to_copy in ["sent_eval.pik", "results.txt", "param_config.pik", "evaluation.txt", "extra_evaluation.txt"]:
+				copyfile(src=os.path.join(check_dir, file_to_copy), 
+						 dst=os.path.join(result_folder, file_to_copy.split("/")[-1]))
+			result_file = os.path.join(check_dir, "results.txt")
+			if os.path.isfile(result_file):
+				with open(result_file, "r") as f:
+					eval_lines = f.readlines()
+				max_acc = -1
+				max_epoch = -1
+				for line in eval_lines:
+					if line.split(" ")[0] != "Epoch":
+						continue
+					loc_epoch = int(line.split(" ")[1].replace(":",""))
+					loc_acc = float(line.split(" ")[2].replace("%",""))
+					if loc_acc > max_acc:
+						max_acc = loc_acc
+						max_epoch = loc_epoch
+				checkpoint_file = "checkpoint_" + str(max_epoch).zfill(3) + ".tar"
+				if max_epoch >= 1 and not os.path.exists(os.path.join(result_folder, checkpoint_file)):
+					copyfile(src=os.path.join(check_dir, checkpoint_file),
+							 dst=os.path.join(result_folder, checkpoint_file))
+if __name__ == '__main__':
+	copy_results()

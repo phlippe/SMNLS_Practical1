@@ -132,6 +132,8 @@ def create_word2vec_vocab():
 SNLI_TRAIN_DATASET = None
 SNLI_VAL_DATASET = None
 SNLI_TEST_DATASET = None
+SNLI_TEST_HARD_DATASET = None
+SNLI_TEST_EASY_DATASET = None
 SNLI_WORD2VEC = None
 SNLI_WORD2ID = None
 SNLI_WORDVEC_TENSOR = None
@@ -163,6 +165,25 @@ def load_SNLI_datasets(debug_dataset=False):
 
 	return SNLI_TRAIN_DATASET, SNLI_VAL_DATASET, SNLI_TEST_DATASET, SNLI_WORD2VEC, SNLI_WORD2ID, SNLI_WORDVEC_TENSOR
 
+def load_SNLI_splitted_test():
+	global SNLI_TEST_HARD_DATASET, SNLI_TEST_EASY_DATASET, SNLI_WORD2ID
+	
+	if SNLI_WORD2ID:
+		_, SNLI_WORD2ID, _ = load_word2vec_from_file()
+
+	if SNLI_TEST_HARD_DATASET is None:
+		test_hard_dataset = SNLIDataset('test_hard', shuffle_data=False)
+		test_hard_dataset.print_statistics()
+		test_hard_dataset.set_vocabulary(SNLI_WORD2ID)
+		SNLI_TEST_HARD_DATASET = test_hard_dataset
+
+	if SNLI_TEST_EASY_DATASET is None:
+		test_easy_dataset = SNLIDataset('test_easy', shuffle_data=False)
+		test_easy_dataset.print_statistics()
+		test_easy_dataset.set_vocabulary(SNLI_WORD2ID)
+		SNLI_TEST_EASY_DATASET = test_easy_dataset
+
+	return SNLI_TEST_HARD_DATASET, SNLI_TEST_EASY_DATASET
 
 ###############################
 ## Dataset class definitions ##
@@ -424,7 +445,5 @@ if __name__ == '__main__':
 	# print("Lengths: " + str(lengths))
 	# print("Labels: " + str(batch_labels))
 	save_word2vec_as_GloVe()
-
-	# print(NLIData._word_seq_to_dict(['this', 'is!', 'test-data', 'what-about-this-hereeee'], word2id))
 
 

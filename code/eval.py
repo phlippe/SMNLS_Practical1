@@ -4,11 +4,14 @@ import argparse
 import math
 import os
 import sys
+import json
+import pickle
 from glob import glob
 
 from model import NLIModel
-from data import load_SNLI_datasets, debug_level
+from data import load_SNLI_datasets, load_SNLI_splitted_test, debug_level
 from mutils import load_model, load_model_from_args, load_args, args_to_params
+from sent_eval import perform_SentEval
 
 from tensorboardX import SummaryWriter
 
@@ -17,7 +20,8 @@ from tensorboardX import SummaryWriter
 class SNLIEval:
 
 	def __init__(self, model, batch_size=64):
-		self.train_dataset, self.val_dataset, self.test_dataset, _, _, _ = load_SNLI_datasets()
+		self.train_dataset, self.val_dataset, self.test_dataset, _, _, _ = load_SNLI_datasets(debug_dataset = False)
+		self.test_hard_dataset, self.test_easy_dataset = load_SNLI_splitted_test()
 		self.model = model
 		self.batch_size = batch_size
 		self.accuracies = dict()
@@ -44,24 +48,44 @@ class SNLIEval:
 			self.accuracies[iteration] = accuracy
 		return accuracy
 
-	def test_best_model(self, checkpoint_path, delete_others=False, run_training_set=False):
+	def test_best_model(self, checkpoint_path, delete_others=False, run_standard_eval=True, run_training_set=False, run_sent_eval=True, run_extra_eval=True):
 		final_dict = load_model(checkpoint_path)
 		max_acc = max(final_dict["eval_accuracies"])
 		best_epoch = final_dict["eval_accuracies"].index(max_acc) + 1
-		print("Best epoch: " + str(best_epoch) + " with accuracy %4.2f%%" % (max_acc * 100.0))
+		s = "Best epoch: " + str(best_epoch) + " with accuracy %4.2f%%" % (max_acc * 100.0) + "\n"
+		print(s)
 
 		load_model(os.path.join(checkpoint_path, "checkpoint_" + str(best_epoch).zfill(3) + ".tar"), model=self.model)
-		if run_training_set:
-			train_acc = self.eval(dataset=self.train_dataset)
-		val_acc = self.eval(dataset=self.val_dataset)
-		test_acc = self.eval(dataset=self.test_dataset)
-		if val_acc != max_acc:
-			print("[!] ERROR: Found different accuracy then reported in the final state dict")
-			sys.exit(1)
-		if run_training_set:
-			print("Train accuracy: %4.2f%%" % (train_acc * 100.0))
-		print("Val accuracy: %4.2f%%" % (val_acc * 100.0))
-		print("Test accuracy: %4.2f%%" % (test_acc * 100.0))
+		for param in self.model.parameters():
+			param.requires_grad = False
+
+		if run_standard_eval:
+			if run_training_set:
+				train_acc = self.eval(dataset=self.train_dataset)
+			val_acc = self.eval(dataset=self.val_dataset)
+			test_acc = self.eval(dataset=self.test_dataset)
+			if abs(val_acc - max_acc) > 0.0005:
+				print("[!] ERROR: Found different accuracy then reported in the final state dict. Difference: %f" % (100.0 * abs(val_acc - max_acc)) ) 
+				return 
+			if run_training_set:
+				s += ("Train accuracy: %4.2f%%" % (train_acc * 100.0)) + "\n"
+			s += ("Val accuracy: %4.2f%%" % (val_acc * 100.0)) + "\n"
+			s += ("Test accuracy: %4.2f%%" % (test_acc * 100.0)) + "\n"
+
+			with open(os.path.join(checkpoint_path, "evaluation.txt"), "w") as f:
+				f.write(s)
+
+		if run_extra_eval:
+			test_easy_acc = self.eval(dataset=self.test_easy_dataset)
+			test_hard_acc = self.eval(dataset=self.test_hard_dataset)
+			s = "Test easy accuracy: %4.2f%%\n Test hard accuracy: %4.2f%%\n" % (test_easy_acc, test_hard_acc)
+			with open(os.path.join(checkpoint_path, "extra_evaluation.txt"), "w") as f:
+				f.write(s)
+
+		if run_sent_eval:
+			res = perform_SentEval(self.model)
+			with open(os.path.join(checkpoint_path, "sent_eval.pik"), "wb") as f:
+				pickle.dump(res, f)
 
 
 	def evaluate_all_models(self, checkpoint_path):
@@ -132,10 +156,31 @@ class SNLIEval:
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
-	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints are saved", type=str, required=True)
+	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints are saved. If it is a regex expression, all experiments are evaluated", type=str, required=True)
+	parser.add_argument("--overwrite", help="Whether evaluations should be re-run if there already exists an evaluation file.", action="store_true")
+	# parser.add_argument("--all", help="Evaluating all experiments in the checkpoint folder (specified by checkpoint path) if not already done", action="store_true")
 	args = parser.parse_args()
-	model = load_model_from_args(load_args(args.checkpoint_path))
-	evaluater = SNLIEval(model)
+	model_list = sorted(glob(args.checkpoint_path))
+
+	for model_checkpoint in model_list:
+		if not os.path.isfile(os.path.join(model_checkpoint, "results.txt")):
+			print("Skipped " + str(model_checkpoint) + " because of missing results file." )
+			continue
+		
+		skip_standard_eval = not args.overwrite and os.path.isfile(os.path.join(model_checkpoint, "evaluation.txt"))
+		skip_sent_eval = not args.overwrite and os.path.isfile(os.path.join(model_checkpoint, "sent_eval.pik"))
+		skip_extra_eval = (not args.overwrite and os.path.isfile(os.path.join(model_checkpoint, "extra_evaluation.txt")))
+
+		try:
+			model = load_model_from_args(load_args(model_checkpoint))
+			evaluater = SNLIEval(model)
+			evaluater.test_best_model(model_checkpoint, 
+									  run_standard_eval=(not skip_standard_eval), 
+									  run_training_set=True,
+									  run_sent_eval=(not skip_sent_eval),
+									  run_extra_eval=(not skip_extra_eval))
+		except RuntimeError:
+			print("[!] Runtime error while loading " + model_checkpoint)
+			continue
 	# evaluater.evaluate_all_models(args.checkpoint_path)
-	evaluater.test_best_model(args.checkpoint_path)
 	# evaluater.visualize_tensorboard(args.checkpoint_path, optimizer_params=optimizer_params)

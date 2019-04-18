@@ -10,7 +10,6 @@ from glob import glob
 from model import NLIModel
 from data import load_SNLI_datasets, debug_level, NLIData, SNLIDataset
 from mutils import load_model, load_model_from_args, load_args, args_to_params
-from eval import get_user_chosen_model
 
 # Sent initials for SentEval
 PATH_TO_SENTEVAL = "../../SentEval"
@@ -69,7 +68,7 @@ def perform_SentEval(model):
 	# 					'Length', 'WordContent', 'Depth', 'TopConstituents',
 	# 					'BigramShift', 'Tense', 'SubjNumber', 'ObjNumber',
 	# 					'OddManOut', 'CoordinationInversion']
-	transfer_tasks = ['MR', 'CR', 'SUBJ', 'MPQA', 'SST2', 'TREC', 'MRPC', 'SICKEntailment', 'SICKRelatedness', 'STS14']
+	transfer_tasks = ['MR', 'CR', 'SUBJ', 'MPQA', 'SST2', 'TREC', 'MRPC', 'SICKEntailment', 'SICKRelatedness', 'STS14'] #   # 
 	results = se.eval(transfer_tasks)
 	print(results)
 	return results
