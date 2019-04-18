@@ -105,7 +105,8 @@ def visualize_tSNE(model, dataset, tensorboard_writer, batch_size=64, embedding_
 	number_batches = int(math.ceil(dataset.get_num_examples()/batch_size))
 	data_embed_list = list()
 	label_list = list()
-	for _ in range(number_batches):
+	for i in range(number_batches):
+		print("Processed %4.2f%% of dataset" % (i*100.0/number_batches), end="\r")
 		embeds, lengths, labels = dataset.get_batch(batch_size=batch_size, loop_dataset=False, toTorch=True)
 		embeds = embeds[0] if isinstance(embeds, list) else embeds 
 		lengths = lengths[0] if isinstance(lengths, list) else lengths
@@ -126,6 +127,10 @@ def copy_results():
 			for file_to_copy in ["sent_eval.pik", "results.txt", "param_config.pik", "evaluation.txt", "extra_evaluation.txt"]:
 				copyfile(src=os.path.join(check_dir, file_to_copy), 
 						 dst=os.path.join(result_folder, file_to_copy.split("/")[-1]))
+			for tf_file_to_copy in sorted(glob(os.path.join(check_dir, "*tfevents*"))):
+				copyfile(src=tf_file_to_copy,
+						 dst=os.path.join(result_folder, tf_file_to_copy.split("/")[-1]))
+
 			result_file = os.path.join(check_dir, "results.txt")
 			if os.path.isfile(result_file):
 				with open(result_file, "r") as f:
@@ -144,5 +149,6 @@ def copy_results():
 				if max_epoch >= 1 and not os.path.exists(os.path.join(result_folder, checkpoint_file)):
 					copyfile(src=os.path.join(check_dir, checkpoint_file),
 							 dst=os.path.join(result_folder, checkpoint_file))
+
 if __name__ == '__main__':
 	copy_results()

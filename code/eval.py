@@ -10,7 +10,7 @@ from glob import glob
 
 from model import NLIModel
 from data import load_SNLI_datasets, load_SNLI_splitted_test, debug_level
-from mutils import load_model, load_model_from_args, load_args, args_to_params
+from mutils import load_model, load_model_from_args, load_args, args_to_params, visualize_tSNE
 from sent_eval import perform_SentEval
 
 from tensorboardX import SummaryWriter
@@ -146,10 +146,17 @@ class SNLIEval:
 				if epoch in final_dict["lr_red_step"]:
 					lr *= lr_decay_step
 
-		model_results, best_acc = self.evaluate_all_models(checkpoint_path)
-		for epoch, result_dict in model_results.items():
-			for data in ["train", "val", "test"]:
-				writer.add_scalar("eval/" + data + "_accuracy", result_dict[data], epoch+1)
+		# model_results, best_acc = self.evaluate_all_models(checkpoint_path)
+		# for epoch, result_dict in model_results.items():
+		# 	for data in ["train", "val", "test"]:
+		# 		writer.add_scalar("eval/" + data + "_accuracy", result_dict[data], epoch+1)
+
+		max_acc = max(final_dict["eval_accuracies"])
+		best_epoch = final_dict["eval_accuracies"].index(max_acc) + 1
+		load_model(os.path.join(checkpoint_path, "checkpoint_" + str(best_epoch).zfill(3) + ".tar"), model=self.model)
+
+		visualize_tSNE(self.model, self.test_easy_dataset, writer, embedding_name="Test set easy")
+		visualize_tSNE(self.model, self.test_hard_dataset, writer, embedding_name="Test set hard")
 
 		writer.close()
 
@@ -158,6 +165,7 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints are saved. If it is a regex expression, all experiments are evaluated", type=str, required=True)
 	parser.add_argument("--overwrite", help="Whether evaluations should be re-run if there already exists an evaluation file.", action="store_true")
+	parser.add_argument("--visualize_embeddings", help="Whether the embeddings of the model should be visualized or not", action="store_true")
 	# parser.add_argument("--all", help="Evaluating all experiments in the checkpoint folder (specified by checkpoint path) if not already done", action="store_true")
 	args = parser.parse_args()
 	model_list = sorted(glob(args.checkpoint_path))
@@ -179,6 +187,8 @@ if __name__ == '__main__':
 									  run_training_set=True,
 									  run_sent_eval=(not skip_sent_eval),
 									  run_extra_eval=(not skip_extra_eval))
+			if args.visualize_embeddings:
+				evaluater.visualize_tensorboard(model_checkpoint)
 		except RuntimeError:
 			print("[!] Runtime error while loading " + model_checkpoint)
 			continue
