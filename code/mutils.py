@@ -150,5 +150,23 @@ def copy_results():
 					copyfile(src=os.path.join(check_dir, checkpoint_file),
 							 dst=os.path.join(result_folder, checkpoint_file))
 
+def results_to_table():
+	result_folder = sorted(glob("results/*"))
+	s = "| Experiment names | Train | Val | Test | Test easy | Test hard |\n"
+	s += "| " + " | ".join(["---"]*(len(s.split("|"))-2)) + " |\n"
+	for res_dir in result_folder:
+		s += "| " + res_dir.split("/")[-1] + " | "
+		with open(os.path.join(res_dir, "evaluation.txt"), "r") as f:
+			lines = f.readlines()
+		for i in [1, 2, 3]:
+			s += lines[i].split(" ")[-1].replace("\n","") + " | "
+		with open(os.path.join(res_dir, "extra_evaluation.txt"), "r") as f:
+			for line in f.readlines():
+				s += line.split(" ")[-1].replace("\n","") + " | "
+		s += "\n"
+	print(s)
+
 if __name__ == '__main__':
-	copy_results()
+	#copy_results()
+	results_to_table()
+

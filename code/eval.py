@@ -78,7 +78,7 @@ class SNLIEval:
 		if run_extra_eval:
 			test_easy_acc = self.eval(dataset=self.test_easy_dataset)
 			test_hard_acc = self.eval(dataset=self.test_hard_dataset)
-			s = "Test easy accuracy: %4.2f%%\n Test hard accuracy: %4.2f%%\n" % (test_easy_acc, test_hard_acc)
+			s = "Test easy accuracy: %4.2f%%\n Test hard accuracy: %4.2f%%\n" % (test_easy_acc*100.0, test_hard_acc*100.0)
 			with open(os.path.join(checkpoint_path, "extra_evaluation.txt"), "w") as f:
 				f.write(s)
 

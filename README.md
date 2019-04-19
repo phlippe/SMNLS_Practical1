@@ -146,6 +146,25 @@ python train.py --model 3 --optimizer 0 --learning_rate 0.1 --weight_decay 1e-5 
 
 ## Results/Visualization
 
+### Quantative results
+
+| Experiment names | Train | Val | Test | Test easy | Test hard |
+| --- | --- | --- | --- | --- | --- |
+| Baseline | 66.52% | 67.79% | 67.65% | 0.80% | 0.43% | 
+| BiLSTM_Adam | 90.65% | 82.93% | 82.26% | 0.91% | 0.65% | 
+| BiLSTM_Adam_2048 | 87.93% | 82.57% | 82.27% | 0.91% | 0.64% | 
+| BiLSTM_Max_Adam | 92.13% | 85.00% | 84.99% | 0.93% | 0.70% | 
+| BiLSTM_Max_SGD_DP | 93.70% | 84.56% | 85.41% | 0.93% | 0.70% | 
+| BiLSTM_Max_SGD_Mom | 90.01% | 82.50% | 81.83% | 0.92% | 0.70% | 
+| BiLSTM_Max_SGD_NoLR | 83.43% | 81.57% | 80.88% | 0.90% | 0.63% | 
+| BiLSTM_Max_SGD_v2 | 96.41% | 84.23% | 84.15% | 0.92% | 0.69% | 
+| BiLSTM_Max_SGD_v2_123 | 90.85% | 84.26% | 84.13% | 0.92% | 0.68% | 
+| BiLSTM_Max_SGD_v2_WD | 94.47% | 84.76% | 84.85% | 0.92% | 0.70% | 
+| BiLSTM_SGD | 86.60% | 81.89% | 81.49% | 0.90% | 0.63% | 
+| BiLSTM_SGD_2048 | 87.39% | 82.20% | 81.13% | 0.90% | 0.63% | 
+| LSTM_Adam | 88.18% | 82.90% | 82.78% | 0.92% | 0.65% | 
+| LSTM_SGD | 86.84% | 82.34% | 81.39% | 0.90% | 0.64% |
+
 ### Visualization
 
 ## TODO
