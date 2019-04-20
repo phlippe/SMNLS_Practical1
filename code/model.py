@@ -338,7 +338,7 @@ class PyTorchLSTMChain(nn.Module):
 		word_embeds = word_embeds[perm_index]
 
 		packed_word_embeds = torch.nn.utils.rnn.pack_padded_sequence(word_embeds, sorted_lengths, batch_first=True)
-		packed_outputs, _ = self.lstm_cell(packed_word_embeds)
+		packed_outputs, (final_hidden_states, _) = self.lstm_cell(packed_word_embeds)
 		outputs, _ = torch.nn.utils.rnn.pad_packed_sequence(packed_outputs, batch_first=True)
 
 		# Redo sort
@@ -350,7 +350,7 @@ class PyTorchLSTMChain(nn.Module):
 		indexes = (lengths - 1) + torch.arange(batch_size, device=word_embeds.device, dtype=lengths.dtype) * int(time_dim) # Index of final states
 		final = reshaped_outputs[indexes.long(),:] # Final states
 
-		return final, outputs
+		return final_hidden_states[0], outputs # final
 
 class ModuleTests():
 
