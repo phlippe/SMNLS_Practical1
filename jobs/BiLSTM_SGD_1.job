@@ -4,7 +4,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=24:00:00
+#SBATCH --time=12:00:00
 #SBATCH --mem=60000M
 #SBATCH --partition=gpu_shared_course
 #SBATCH --gres=gpu:1
@@ -25,7 +25,7 @@ rsync -a $HOME/SMNLS_Practical1/code/small_glove_* $EXPDIR/code/
 rsync -a $HOME/SMNLS_Practical1/snli_1.0 $EXPDIR/
 cd $EXPDIR/code
 
-srun python3 -u train.py --cluster --model 2 --epochs 100 --optimizer 0 --learning_rate 0.1 --weight_decay 1e-5 --lr_max_red_steps 5 --embed_dim 4096 --seed 42 --tensorboard --restart --intermediate_evals --checkpoint_path checkpoints/BiLSTM_SGD
+srun python3 -u train.py --cluster --model 2 --epochs 100 --optimizer 0 --learning_rate 0.1 --weight_decay 1e-5 --lr_max_red_steps 5 --embed_dim 4096 --seed 42 --tensorboard --restart --intermediate_evals --checkpoint_path checkpoints/BiLSTM_SGD_1
 
 rsync -av checkpoints/* $HOME/SMNLS_Practical1/code/checkpoints/
 
