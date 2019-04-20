@@ -166,7 +166,31 @@ def results_to_table():
 		s += "\n"
 	print(s)
 
+def sent_eval_to_table():
+	result_folder = sorted(glob("results/*"))
+	with open(os.path.join(result_folder[0], "sent_eval.pik"), "rb") as f:
+		sample_dict = pickle.load(f)
+	task_list = list(sample_dict.keys())
+	s = "| Experiment names | " + " | ".join(task_list) + " |\n"
+	s += "| " + " | ".join(["---"]*(len(task_list)+1)) + " |\n"
+	for res_dir in result_folder:
+		s += "| " + res_dir.split("/")[-1] + " | "
+		with open(os.path.join(res_dir, "sent_eval.pik"), "rb") as f:
+			sample_dict = pickle.load(f)
+		for task_key in task_list:
+			if "acc" in sample_dict[task_key]:
+				s +=  "%4.2f%%" % (sample_dict[task_key]["acc"]) + ("/%4.2f%%" % (sample_dict[task_key]["f1"]) if "f1" in sample_dict[task_key] else "")
+			elif "pearson" in sample_dict[task_key]:
+				s += "%4.2f" % (sample_dict[task_key]["pearson"])
+			elif 'all' in sample_dict[task_key]:
+				s += "%4.2f/%4.2f" % (sample_dict[task_key]["all"]["pearson"]["mean"], sample_dict[task_key]["all"]["spearman"]["mean"])
+			s +=  " | "
+		s += "\n"
+	print(s)
+
+
 if __name__ == '__main__':
 	#copy_results()
-	results_to_table()
+	#results_to_table()
+	sent_eval_to_table()
 
