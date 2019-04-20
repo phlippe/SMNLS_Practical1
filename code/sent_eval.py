@@ -15,7 +15,12 @@ from mutils import load_model, load_model_from_args, load_args, args_to_params
 PATH_TO_SENTEVAL = "../../SentEval"
 PATH_TO_DATA = PATH_TO_SENTEVAL + '/data'
 sys.path.insert(0, PATH_TO_SENTEVAL)
-import senteval
+
+import importlib
+spam_spec = importlib.util.find_spec("spam")
+FOUND_SENTEVAL = spam_spec is not None
+if FOUND_SENTEVAL:
+	import senteval
 
 def create_model(checkpoint_path, model_type, model_params):
 	_, _, _, word2vec, word2id, wordvec_tensor = load_SNLI_datasets(debug_dataset = True)
@@ -51,7 +56,7 @@ def batcher(params, batch):
 	return sent_embeddings.cpu()
 
 def perform_SentEval(model):
-	global MODEL 
+	global MODEL, FOUND_SENTEVAL
 	MODEL = model
 	# Set params for SentEval
 	params_senteval = {'task_path': PATH_TO_DATA, 'usepytorch': True, 'kfold': 5}
@@ -61,16 +66,19 @@ def perform_SentEval(model):
 	# Set up logger
 	logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
 
-	se = senteval.engine.SE(params_senteval, batcher, prepare)
-	# transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16',
-	# 					'MR', 'CR', 'MPQA', 'SUBJ', 'SST2', 'SST5', 'TREC', 'MRPC',
-	# 					'SICKEntailment', 'SICKRelatedness', 'STSBenchmark',
-	# 					'Length', 'WordContent', 'Depth', 'TopConstituents',
-	# 					'BigramShift', 'Tense', 'SubjNumber', 'ObjNumber',
-	# 					'OddManOut', 'CoordinationInversion']
-	transfer_tasks = ['MR', 'CR', 'SUBJ', 'MPQA', 'SST2', 'TREC', 'MRPC', 'SICKEntailment', 'SICKRelatedness', 'STS14'] #   # 
-	results = se.eval(transfer_tasks)
-	print(results)
+	if FOUND_SENTEVAL:
+		se = senteval.engine.SE(params_senteval, batcher, prepare)
+		# transfer_tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16',
+		# 					'MR', 'CR', 'MPQA', 'SUBJ', 'SST2', 'SST5', 'TREC', 'MRPC',
+		# 					'SICKEntailment', 'SICKRelatedness', 'STSBenchmark',
+		# 					'Length', 'WordContent', 'Depth', 'TopConstituents',
+		# 					'BigramShift', 'Tense', 'SubjNumber', 'ObjNumber',
+		# 					'OddManOut', 'CoordinationInversion']
+		transfer_tasks = ['MR', 'CR', 'SUBJ', 'MPQA', 'SST2', 'TREC', 'MRPC', 'SICKEntailment', 'SICKRelatedness', 'STS14'] #   # 
+		results = se.eval(transfer_tasks)
+		print(results)
+	else:
+		results = None
 	return results
 
 

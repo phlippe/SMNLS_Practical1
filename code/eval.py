@@ -11,9 +11,10 @@ from glob import glob
 from model import NLIModel
 from data import load_SNLI_datasets, load_SNLI_splitted_test, debug_level
 from mutils import load_model, load_model_from_args, load_args, args_to_params, visualize_tSNE
-from sent_eval import perform_SentEval
 
 from tensorboardX import SummaryWriter
+
+from sent_eval import perform_SentEval
 
 
 
