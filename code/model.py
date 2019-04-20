@@ -350,7 +350,11 @@ class PyTorchLSTMChain(nn.Module):
 		indexes = (lengths - 1) + torch.arange(batch_size, device=word_embeds.device, dtype=lengths.dtype) * int(time_dim) # Index of final states
 		final = reshaped_outputs[indexes.long(),:] # Final states
 
-		return final_hidden_states[0], outputs # final
+		final_hidden_states = final_hidden_states.transpose(0, 1).transpose(1, 2)
+		# print("Final hidden states shape: " + str(final_hidden_states.shape))
+		final_hidden_states = final_hidden_states.reshape([batch_size, self.hidden_size * final_hidden_states.shape[-1]])
+
+		return final_hidden_states, outputs # final
 
 class ModuleTests():
 
