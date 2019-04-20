@@ -152,7 +152,7 @@ def copy_results():
 
 def results_to_table():
 	result_folder = sorted(glob("results/*"))
-	s = "| Experiment names | Train | Val | Test | Test easy | Test hard |\n"
+	s = "| Experiment names | Train | Val | Test | Test easy | Test hard | Micro | Macro |\n"
 	s += "| " + " | ".join(["---"]*(len(s.split("|"))-2)) + " |\n"
 	for res_dir in result_folder:
 		s += "| " + res_dir.split("/")[-1] + " | "
@@ -163,6 +163,10 @@ def results_to_table():
 		with open(os.path.join(res_dir, "extra_evaluation.txt"), "r") as f:
 			for line in f.readlines():
 				s += line.split(" ")[-1].replace("\n","") + " | "
+		with open(os.path.join(res_dir, "sent_eval.pik"), "rb") as f:
+			sent_eval_dict = pickle.load(f)
+		accs = [val["acc"] for key, val in sent_eval_dict.items() if "acc" in val]
+		s += "%4.2f%% | %4.2f%% |" % (sum(accs)/len(accs), sum(accs)/len(accs))
 		s += "\n"
 	print(s)
 
@@ -183,7 +187,7 @@ def sent_eval_to_table():
 			elif "pearson" in sample_dict[task_key]:
 				s += "%4.2f" % (sample_dict[task_key]["pearson"])
 			elif 'all' in sample_dict[task_key]:
-				s += "%4.2f/%4.2f" % (sample_dict[task_key]["all"]["pearson"]["mean"], sample_dict[task_key]["all"]["spearman"]["mean"])
+				s += "%4.2f/%4.2f" % (sample_dict[task_key]["all"]["pearson"]["wmean"], sample_dict[task_key]["all"]["spearman"]["wmean"])
 			s +=  " | "
 		s += "\n"
 	print(s)
@@ -191,6 +195,7 @@ def sent_eval_to_table():
 
 if __name__ == '__main__':
 	#copy_results()
-	#results_to_table()
+	results_to_table()
+	print("\n\n")
 	sent_eval_to_table()
 
