@@ -344,17 +344,23 @@ class PyTorchLSTMChain(nn.Module):
 		# Redo sort
 		_, unsort_indices = perm_index.sort(0, descending=False)
 		outputs = outputs[unsort_indices]
+		final_hidden_states = final_hidden_states[:,unsort_indices]
 
 		reshaped_outputs = outputs.view(-1, outputs.shape[-1]) # Reshape for better indexing
 		# print((time_dim).dtype)
 		indexes = (lengths - 1) + torch.arange(batch_size, device=word_embeds.device, dtype=lengths.dtype) * int(time_dim) # Index of final states
 		final = reshaped_outputs[indexes.long(),:] # Final states
 
-		final_hidden_states = final_hidden_states.transpose(0, 1).transpose(1, 2)
+		final_states = final_hidden_states.transpose(0, 1).transpose(1, 2)
 		# print("Final hidden states shape: " + str(final_hidden_states.shape))
-		final_hidden_states = final_hidden_states.reshape([batch_size, self.hidden_size * final_hidden_states.shape[-1]])
+		final_states = final_states.reshape([batch_size, self.hidden_size * final_states.shape[-1]])
 
-		return final_hidden_states, outputs # final
+		# print("Final: " + str(final[0:4,0]))
+		# print("Initial 0: " + str(final_hidden_states[0,0:4,0]))
+		# print("Initial 1: " + str(final_hidden_states[1,0:4,0]))
+		# print("Pre-final: " + str(final_states[0:4,0]))
+
+		return final_states, outputs # final
 
 class ModuleTests():
 
