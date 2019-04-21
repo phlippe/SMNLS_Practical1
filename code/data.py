@@ -99,15 +99,15 @@ def create_word2vec_vocab():
 
 	for dataset, name in zip([train_dataset, test_dataset, val_dataset], ["train", "test", "val"]):
 		filename = name + "_word_list.txt"
-		if not os.path.isfile(filename):
-			word_list = val_dataset.get_word_list()
+		if True or not os.path.isfile(filename):
+			word_list = dataset.get_word_list()
 			with open(filename, "w") as f:
 				f.write("\n".join(word_list))
 
 	train_word_list = [l.rstrip() for l in open("train_word_list.txt", "r")]
 	test_word_list = [l.rstrip() for l in open("test_word_list.txt", "r")]
 	val_word_list = [l.rstrip() for l in open("val_word_list.txt", "r")]
-	senteval_word_list = [l.rstrip() for l in open("senteval_unknown_words.txt")]
+	senteval_word_list = [l.rstrip() for l in open("senteval_unknown_words.txt")] + [l.rstrip() for l in open("senteval_Img_unknown_words.txt")]
 	
 	word_list = list(set(val_word_list + test_word_list + train_word_list + senteval_word_list)) + ['<s>', '</s>', '<p>', 'UNK']
 	# Allow both with "-" and without "-" words to cover all possible preprocessing steps
@@ -438,8 +438,8 @@ class SentData:
 
 
 if __name__ == '__main__':
-	# create_word2vec_vocab()
-	train_dataset, val_dataset, test_dataset, word2vec, word2id, wordvec_tensor = load_SNLI_datasets()
+	create_word2vec_vocab()
+	# train_dataset, val_dataset, test_dataset, word2vec, word2id, wordvec_tensor = load_SNLI_datasets()
 	# embeds, lengths, batch_labels = train_dataset.get_batch(8)
 	# print("Embeddings: " + str(embeds))
 	# print("Lengths: " + str(lengths))

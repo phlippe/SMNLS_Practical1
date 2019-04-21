@@ -30,7 +30,11 @@ def load_model(checkpoint_path, model=None, optimizer=None, lr_scheduler=None):
 	else:
 		checkpoint = torch.load(checkpoint_path, map_location='cpu')
 	if model is not None:
-		model.load_state_dict(checkpoint['model_state_dict'])
+		pretrained_model_dict = {key: val for key, val in checkpoint['model_state_dict'].items() if not key.startswith("embeddings")}
+		model_dict = model.state_dict()
+		model_dict.update(pretrained_model_dict)
+		model.load_state_dict(model_dict)
+		# model.load_state_dict(checkpoint['model_state_dict'])
 	if optimizer is not None:
 		optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 	if lr_scheduler is not None:

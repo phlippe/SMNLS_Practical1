@@ -181,10 +181,13 @@ class SNLITrain:
 		if writer is not None:
 			writer.close()
 
-	def save_model(self, epoch, add_param_dict, step=None):
+	def save_model(self, epoch, add_param_dict, step=None, save_embeddings=False):
 		checkpoint_file = os.path.join(self.checkpoint_path, 'checkpoint_' + str(epoch).zfill(3) + ("_step_%i" % (step) if step is not None else "") + ".tar")
+		model_dict = self.model.state_dict()
+		if not save_embeddings:
+			model_dict = {k:v for k,v in model_dict.items() if not k.startswith("embeddings")}
 		checkpoint_dict = {
-				'model_state_dict': self.model.state_dict(),
+				'model_state_dict': model_dict,
 				'optimizer_state_dict': self.optimizer.state_dict(),
 				'scheduler_state_dict': self.lr_scheduler.state_dict()
 		}
