@@ -9,11 +9,12 @@ import os
 import sys
 import json
 import pickle
+import copy
 from glob import glob
 from shutil import copyfile
 
 from model import NLIModel
-from data import load_SNLI_datasets, debug_level, set_debug_level
+from data import load_SNLI_datasets, debug_level, set_debug_level, DatasetTemplate, SentData
 
 PARAM_CONFIG_FILE = "param_config.pik"
 
@@ -104,8 +105,16 @@ def get_dict_val(checkpoint_dict, key, default_val):
 	else:
 		return default_val
 
-def visualize_tSNE(model, dataset, tensorboard_writer, batch_size=64, embedding_name='default', global_step=None):
-
+def visualize_tSNE(model, dataset, tensorboard_writer, batch_size=64, embedding_name='default', global_step=None, add_reduced_version=False):
+	if add_reduced_version:
+		random.seed(42)
+		sub_dataset = copy.deepcopy(dataset)
+		random.shuffle(sub_dataset.data_list)
+		sub_datalist = sub_dataset.data_list[:min(1000, len(sub_dataset.data_list))]
+		sub_dataset.set_data_list(sub_datalist)
+		return visualize_tSNE(model=model, dataset=sub_dataset, tensorboard_writer=tensorboard_writer, 
+							  batch_size=batch_size, embedding_name=embedding_name + "_reduced", 
+					   		  global_step=global_step, add_reduced_version=False)
 	number_batches = int(math.ceil(dataset.get_num_examples()/batch_size))
 	data_embed_list = list()
 	label_list = list()
@@ -118,8 +127,76 @@ def visualize_tSNE(model, dataset, tensorboard_writer, batch_size=64, embedding_
 		data_embed_list.append(sent_embeds)
 		label_list.append(labels)
 	final_embeddings = torch.cat(data_embed_list, dim=0)
-	final_labels = torch.cat(label_list, dim=0)
+	final_labels = torch.cat(label_list, dim=0).squeeze().tolist()
+	final_labels = [dataset.label_to_string(lab) for lab in final_labels]
 	tensorboard_writer.add_embedding(final_embeddings, metadata=final_labels, tag=embedding_name, global_step=global_step)
+
+
+# Function copied from SentEval for reproducibility
+def loadFile(fpath):
+	with open(fpath, 'r', encoding='latin-1') as f:
+		return [line.split() for line in f.read().splitlines()]
+
+def task_to_dataset(sentences, labels, label_dict=None):
+	_, _, _, _, word2id, _ = load_SNLI_datasets(debug_dataset = False)
+	data_batch = list()
+	for sent, lab in zip(sentences, labels):
+		str_sent = " ".join([w if isinstance(w, str) else w.decode('UTF-8') for w in sent])
+		new_d = SentData(sentence=str_sent, label=lab)
+		new_d.translate_to_dict(word2id)
+		data_batch.append(new_d)
+	dataset = DatasetTemplate("all")
+	dataset.set_data_list(data_batch)
+	if label_dict is not None:
+		dataset.add_label_explanation(label_dict)
+	return dataset
+
+def get_transfer_datasets():
+	transfer_datasets = dict()
+	
+	def load_classification_dataset(file_classes, label_dict=None):
+		sents_classes = [loadFile(fpath) for fpath in file_classes]
+		sentences = []
+		labels = []
+		for class_index, sent_class in enumerate(sents_classes):
+			sentences += sent_class
+			labels += [class_index] * len(sent_class)
+		return task_to_dataset(sentences, labels, label_dict=label_dict)
+
+	# SUBJ Task
+	subj_task_path = "../../SentEval/data/downstream/SUBJ/"		
+	transfer_datasets["SUBJ"] = load_classification_dataset([os.path.join(subj_task_path, 'subj.objective'),
+															 os.path.join(subj_task_path, 'subj.subjective')],
+															{0: "Objective", 1: "Subjective"})
+
+	cr_task_path = "../../SentEval/data/downstream/CR/"		
+	transfer_datasets["CR"] = load_classification_dataset([os.path.join(cr_task_path, 'custrev.neg'),
+														   os.path.join(cr_task_path, 'custrev.pos')],
+														   {0: "Negative", 1: "Positive"})
+
+	mr_task_path = "../../SentEval/data/downstream/MR/"		
+	transfer_datasets["MR"] = load_classification_dataset([os.path.join(mr_task_path, 'rt-polarity.neg'),
+														   os.path.join(mr_task_path, 'rt-polarity.pos')],
+														   {0: "Negative", 1: "Positive"})
+
+	mpqa_task_path = "../../SentEval/data/downstream/MPQA/"		
+	transfer_datasets["MPQA"] = load_classification_dataset([os.path.join(mpqa_task_path, 'mpqa.neg'),
+															 os.path.join(mpqa_task_path, 'mpqa.pos')],
+														     {0: "Negative", 1: "Positive"})
+
+	trec_task_path = "../../SentEval/data/downstream/TREC/"		
+	trec_file = loadFile(os.path.join(trec_task_path, 'train_5500.label'))
+	tgt2idx = {'ABBR': 0, 'DESC': 1, 'ENTY': 2,
+			   'HUM': 3, 'LOC': 4, 'NUM': 5}
+	trec_sentences = [line[1:] for line in trec_file]
+	trec_short_sentences = [line[1:min(3, len(line))] for line in trec_file]
+	trec_labels = [tgt2idx[line[0].split(":")[0]] for line in trec_file]
+	transfer_datasets["TREC"] = task_to_dataset(trec_sentences, trec_labels, label_dict=tgt2idx)
+	transfer_datasets["TREC_short"] = task_to_dataset(trec_short_sentences, trec_labels, label_dict=tgt2idx)
+
+	return transfer_datasets
+
+
 
 def copy_results():
 	checkpoint_folder = sorted(glob("checkpoints/*"))
@@ -141,6 +218,7 @@ def copy_results():
 					eval_lines = f.readlines()
 				max_acc = -1
 				max_epoch = -1
+				last_epoch = -1
 				for line in eval_lines:
 					if line.split(" ")[0] != "Epoch":
 						continue
@@ -149,21 +227,30 @@ def copy_results():
 					if loc_acc > max_acc:
 						max_acc = loc_acc
 						max_epoch = loc_epoch
-				checkpoint_file = "checkpoint_" + str(max_epoch).zfill(3) + ".tar"
-				if max_epoch >= 1 and not os.path.exists(os.path.join(result_folder, checkpoint_file)):
-					copyfile(src=os.path.join(check_dir, checkpoint_file),
-							 dst=os.path.join(result_folder, checkpoint_file))
+					if loc_epoch > last_epoch:
+						last_epoch = loc_epoch
+				for epoch in [max_epoch, last_epoch]:
+					checkpoint_file = "checkpoint_" + str(epoch).zfill(3) + ".tar"
+					if epoch >= 1 and not os.path.exists(os.path.join(result_folder, checkpoint_file)):
+						copyfile(src=os.path.join(check_dir, checkpoint_file),
+								 dst=os.path.join(result_folder, checkpoint_file))
 
 def results_to_table():
 	result_folder = sorted(glob("results/*"))
 	s = "| Experiment names | Train | Val | Test | Test easy | Test hard | Micro | Macro |\n"
 	s += "| " + " | ".join(["---"]*(len(s.split("|"))-2)) + " |\n"
 	for res_dir in result_folder:
+		print("Processing " + str(res_dir))
 		s += "| " + res_dir.split("/")[-1] + " | "
 		with open(os.path.join(res_dir, "evaluation.txt"), "r") as f:
 			lines = f.readlines()
-		for i in [1, 2, 3]:
-			s += lines[i].split(" ")[-1].replace("\n","") + " | "
+		if len(lines) > 3:
+			for i in [1, 2, 3]:
+				s += lines[i].split(" ")[-1].replace("\n","") + " | "
+		else:
+			s += " - | "
+			for i in [1, 2]:
+				s += lines[i].split(" ")[-1].replace("\n","") + " | "
 		with open(os.path.join(res_dir, "extra_evaluation.txt"), "r") as f:
 			for line in f.readlines():
 				s += line.split(" ")[-1].replace("\n","") + " | "
@@ -197,9 +284,11 @@ def sent_eval_to_table():
 	print(s)
 
 
+
+
 if __name__ == '__main__':
-	#copy_results()
-	results_to_table()
-	print("\n\n")
-	sent_eval_to_table()
+	copy_results()
+	# results_to_table()
+	# print("\n\n")
+	# sent_eval_to_table()
 

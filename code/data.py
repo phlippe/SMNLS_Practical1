@@ -190,6 +190,7 @@ def load_SNLI_splitted_test():
 
 	return SNLI_TEST_HARD_DATASET, SNLI_TEST_EASY_DATASET
 
+
 ###############################
 ## Dataset class definitions ##
 ###############################
@@ -200,6 +201,7 @@ class DatasetTemplate:
 		self.data_type = data_type
 		self.shuffle_data = shuffle_data
 		self.set_data_list(list())
+		self.label_dict = dict()
 
 	def set_data_list(self, new_data):
 		self.data_list = new_data
@@ -260,6 +262,18 @@ class DatasetTemplate:
 	def get_num_classes(self):
 		raise NotImplementedError
 
+	def add_label_explanation(self, label_dict):
+		# The keys should be the labels, the explanation strings
+		if isinstance(list(label_dict.keys())[0], str) and not isinstance(list(label_dict.values())[0], str):
+			label_dict = {v: k for k, v in label_dict.items()}
+		self.label_dict = label_dict
+
+	def label_to_string(self, label):
+		if label in self.label_dict:
+			return self.label_dict[label]
+		else:
+			return str(label)
+
 
 class SNLIDataset(DatasetTemplate):
 
@@ -271,6 +285,7 @@ class SNLIDataset(DatasetTemplate):
 		else:
 			self.data_list == list()
 		super().set_data_list(self.data_list)
+		super().add_label_explanation(NLIData.LABEL_LIST)
 
 	def load_data(self, data_path, data_type):
 		self.data_list = list()

@@ -10,7 +10,7 @@ from glob import glob
 
 from model import NLIModel
 from data import load_SNLI_datasets, load_SNLI_splitted_test, debug_level
-from mutils import load_model, load_model_from_args, load_args, args_to_params, visualize_tSNE
+from mutils import load_model, load_model_from_args, load_args, args_to_params, visualize_tSNE, get_transfer_datasets
 
 from tensorboardX import SummaryWriter
 
@@ -49,20 +49,25 @@ class SNLIEval:
 			self.accuracies[iteration] = accuracy
 		return accuracy
 
-	def test_best_model(self, checkpoint_path, delete_others=False, run_standard_eval=True, run_training_set=False, run_sent_eval=True, run_extra_eval=True):
+	def test_best_model(self, checkpoint_path, delete_others=False, run_standard_eval=True, run_training_set=False, run_sent_eval=True, run_extra_eval=True, light_senteval=True):
 		final_dict = load_model(checkpoint_path)
 		max_acc = max(final_dict["eval_accuracies"])
 		best_epoch = final_dict["eval_accuracies"].index(max_acc) + 1
 		s = "Best epoch: " + str(best_epoch) + " with accuracy %4.2f%%" % (max_acc * 100.0) + "\n"
 		print(s)
 
-		load_model(os.path.join(checkpoint_path, "checkpoint_" + str(best_epoch).zfill(3) + ".tar"), model=self.model)
+		best_checkpoint_path = os.path.join(checkpoint_path, "checkpoint_" + str(best_epoch).zfill(3) + ".tar")
+		load_model(best_checkpoint_path, model=self.model)
 		for param in self.model.parameters():
 			param.requires_grad = False
 
 		if run_standard_eval:
 			if run_training_set:
+				# For training, we evaluate on the very last checkpoint as we expect to have the best training performance there
+				load_model(checkpoint_path, model=self.model)
 				train_acc = self.eval(dataset=self.train_dataset)
+				# Load best checkpoint again
+				load_model(best_checkpoint_path, model=self.model)
 			val_acc = self.eval(dataset=self.val_dataset)
 			test_acc = self.eval(dataset=self.test_dataset)
 			if abs(val_acc - max_acc) > 0.0005:
@@ -84,7 +89,8 @@ class SNLIEval:
 				f.write(s)
 
 		if run_sent_eval:
-			res = perform_SentEval(self.model)
+			self.model.eval()
+			res = perform_SentEval(self.model, fast_eval=light_senteval)
 			with open(os.path.join(checkpoint_path, "sent_eval.pik"), "wb") as f:
 				pickle.dump(res, f)
 
@@ -121,7 +127,7 @@ class SNLIEval:
 		return model_results, best_acc
 
 
-	def visualize_tensorboard(self, checkpoint_path, optimizer_params=None, replace_old_files=False):
+	def visualize_tensorboard(self, checkpoint_path, optimizer_params=None, replace_old_files=False, additional_datasets=None):
 		if replace_old_files:
 			for old_tf_file in sorted(glob(os.path.join(checkpoint_path, "events.out.tfevents.*"))):
 				print("Removing " + old_tf_file + "...")
@@ -156,20 +162,25 @@ class SNLIEval:
 		best_epoch = final_dict["eval_accuracies"].index(max_acc) + 1
 		load_model(os.path.join(checkpoint_path, "checkpoint_" + str(best_epoch).zfill(3) + ".tar"), model=self.model)
 
-		visualize_tSNE(self.model, self.test_easy_dataset, writer, embedding_name="Test set easy")
-		visualize_tSNE(self.model, self.test_hard_dataset, writer, embedding_name="Test set hard")
+		visualize_tSNE(self.model, self.test_easy_dataset, writer, embedding_name="Test set easy", add_reduced_version=True)
+		visualize_tSNE(self.model, self.test_hard_dataset, writer, embedding_name="Test set hard", add_reduced_version=True)
+		if additional_datasets is not None:
+			for dataset_name, dataset in additional_datasets.items():
+				print("Adding embeddings for dataset " + str(dataset_name))
+				visualize_tSNE(self.model, dataset, writer, embedding_name=dataset_name, add_reduced_version=True)
 
 		writer.close()
-
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints are saved. If it is a regex expression, all experiments are evaluated", type=str, required=True)
 	parser.add_argument("--overwrite", help="Whether evaluations should be re-run if there already exists an evaluation file.", action="store_true")
 	parser.add_argument("--visualize_embeddings", help="Whether the embeddings of the model should be visualized or not", action="store_true")
+	parser.add_argument("--full_senteval", help="Whether to run SentEval with the heavy setting or not", action="store_true")
 	# parser.add_argument("--all", help="Evaluating all experiments in the checkpoint folder (specified by checkpoint path) if not already done", action="store_true")
 	args = parser.parse_args()
 	model_list = sorted(glob(args.checkpoint_path))
+	transfer_datasets = get_transfer_datasets()
 
 	for model_checkpoint in model_list:
 		if not os.path.isfile(os.path.join(model_checkpoint, "results.txt")):
@@ -185,13 +196,15 @@ if __name__ == '__main__':
 			evaluater = SNLIEval(model)
 			evaluater.test_best_model(model_checkpoint, 
 									  run_standard_eval=(not skip_standard_eval), 
-									  run_training_set=True,
+									  run_training_set=False,
 									  run_sent_eval=(not skip_sent_eval),
-									  run_extra_eval=(not skip_extra_eval))
+									  run_extra_eval=(not skip_extra_eval),
+									  light_senteval=(not args.full_senteval))
 			if args.visualize_embeddings:
-				evaluater.visualize_tensorboard(model_checkpoint)
-		except RuntimeError:
+				evaluater.visualize_tensorboard(model_checkpoint, replace_old_files=args.overwrite, additional_datasets=transfer_datasets)
+		except RuntimeError as e:
 			print("[!] Runtime error while loading " + model_checkpoint)
+			print(e)
 			continue
 	# evaluater.evaluate_all_models(args.checkpoint_path)
 	# evaluater.visualize_tensorboard(args.checkpoint_path, optimizer_params=optimizer_params)

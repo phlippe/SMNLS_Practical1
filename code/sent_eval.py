@@ -73,10 +73,12 @@ def perform_SentEval(model, fast_eval=False):
 		params_senteval = {'task_path': PATH_TO_DATA, 'usepytorch': torch.cuda.is_available(), 'kfold': 5}
 		params_senteval['classifier'] = {'nhid': 0, 'optim': 'rmsprop', 'batch_size': 128,
 										 'tenacity': 3, 'epoch_size': 2}
+		transfer_tasks = ['MR', 'CR', 'SUBJ', 'MPQA', 'SST2', 'TREC', 'MRPC', 'SICKEntailment', 'SICKRelatedness', 'STS14']
 	else:
 		params_senteval = {'task_path': PATH_TO_DATA, 'usepytorch': torch.cuda.is_available(), 'kfold': 10}
 		params_senteval['classifier'] = {'nhid': 0, 'optim': 'adam', 'batch_size': 64, 'tenacity': 5, 'epoch_size': 4}
-
+		transfer_tasks = ['MR', 'CR', 'SUBJ', 'MPQA', 'SST2', 'TREC', 'MRPC', 'SICKEntailment', 'SICKRelatedness', 'STS14', 'ImageCaptionRetrieval']
+		
 	# Set up logger
 	logging.basicConfig(format='%(asctime)s : %(message)s', level=logging.DEBUG)
 
@@ -88,7 +90,6 @@ def perform_SentEval(model, fast_eval=False):
 		# 					'Length', 'WordContent', 'Depth', 'TopConstituents',
 		# 					'BigramShift', 'Tense', 'SubjNumber', 'ObjNumber',
 		# 					'OddManOut', 'CoordinationInversion']
-		transfer_tasks = ['MR', 'CR', 'SUBJ', 'MPQA', 'SST2', 'TREC', 'MRPC', 'SICKEntailment', 'SICKRelatedness', 'STS14', 'ImageCaptionRetrieval']
 		results = se.eval(transfer_tasks)
 		print(results)
 	else:
