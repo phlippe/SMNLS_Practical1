@@ -107,9 +107,13 @@ def create_word2vec_vocab():
 	train_word_list = [l.rstrip() for l in open("train_word_list.txt", "r")]
 	test_word_list = [l.rstrip() for l in open("test_word_list.txt", "r")]
 	val_word_list = [l.rstrip() for l in open("val_word_list.txt", "r")]
-	senteval_word_list = [l.rstrip() for l in open("senteval_unknown_words.txt")] + [l.rstrip() for l in open("senteval_Img_unknown_words.txt")]
-	
-	word_list = list(set(val_word_list + test_word_list + train_word_list + senteval_word_list)) + ['<s>', '</s>', '<p>', 'UNK']
+	senteval_word_list = [l.rstrip() for l in open("senteval_unknown_words.txt")]
+	if os.path.isfile("small_glove_words.txt"):
+		old_glove = [l.strip() for l in open("senteval_unknown_words.txt")]
+	else:
+		old_glove = []
+
+	word_list = list(set(val_word_list + test_word_list + train_word_list + senteval_word_list + old_glove + ['<s>', '</s>', '<p>', 'UNK']))
 	# Allow both with "-" and without "-" words to cover all possible preprocessing steps
 	print("Created word list with " + str(len(word_list)) + " words. Checking for \"-\" confusion...")
 	for word in word_list:
@@ -121,13 +125,13 @@ def create_word2vec_vocab():
 
 	voc = build_vocab(word_list)
 	np_word_list = []
-	with open('small_glove_words.txt', 'w') as f:
+	with open('small_glove_words_new.txt', 'w') as f:
 		# json.dump(voc, f)
 		for key, val in voc.items():
 			f.write(key + "\n")
 			np_word_list.append(val)
 	np_word_array = np.stack(np_word_list, axis=0)
-	np.save('small_glove_embed.npy', np_word_array)
+	np.save('small_glove_embed_new.npy', np_word_array)
 
 SNLI_TRAIN_DATASET = None
 SNLI_VAL_DATASET = None
@@ -444,6 +448,6 @@ if __name__ == '__main__':
 	# print("Embeddings: " + str(embeds))
 	# print("Lengths: " + str(lengths))
 	# print("Labels: " + str(batch_labels))
-	save_word2vec_as_GloVe()
+	# save_word2vec_as_GloVe()
 
 
