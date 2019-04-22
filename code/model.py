@@ -57,9 +57,9 @@ class NLIModel(nn.Module):
 		out = self.classifier(embed_s1, embed_s2, applySoftmax=applySoftmax)
 		return out
 
-	def encode_sentence(self, words, lengths, dummy_input=False):
+	def encode_sentence(self, words, lengths, dummy_input=False, debug=False):
 		word_embeds = self.embeddings(words)
-		sent_embeds = self.encoder(word_embeds, lengths, dummy_input=dummy_input)
+		sent_embeds = self.encoder(word_embeds, lengths, dummy_input=dummy_input, debug=debug)
 		return sent_embeds
 
 	# TODO: REMOVE FUNCTION
@@ -115,7 +115,7 @@ class EncoderModule(nn.Module):
 	def __init__(self):
 		super(EncoderModule, self).__init__()
 
-	def forward(self, embed_words, lengths, dummy_input=False):
+	def forward(self, embed_words, lengths, dummy_input=False, debug=False):
 		raise NotImplementedError
 
 
@@ -124,7 +124,7 @@ class EncoderBOW(EncoderModule):
 	def __init__(self):
 		super(EncoderBOW, self).__init__()
 
-	def forward(self, embed_words, lengths, dummy_input=False):
+	def forward(self, embed_words, lengths, dummy_input=False, debug=False):
 		# Embeds are of shape [batch, time, embed_dim]
 		# Lengths is of shape [batch]
 		word_positions = torch.arange(start=0, end=embed_words.shape[1], dtype=lengths.dtype, device=embed_words.device)
@@ -140,7 +140,7 @@ class EncoderLSTM(EncoderModule):
 		self.lstm_chain = PyTorchLSTMChain(input_size=model_params["embed_word_dim"], 
 									hidden_size=model_params["embed_sent_dim"])
 
-	def forward(self, embed_words, lengths, dummy_input=False):
+	def forward(self, embed_words, lengths, dummy_input=False, debug=False):
 		final_states, _ = self.lstm_chain(embed_words, lengths, dummy_input=dummy_input)
 		return final_states
 
@@ -153,7 +153,7 @@ class EncoderBILSTM(EncoderModule):
 										   hidden_size=int(model_params["embed_sent_dim"]/2),
 										   bidirectional=True)
 
-	def forward(self, embed_words, lengths, dummy_input=False):
+	def forward(self, embed_words, lengths, dummy_input=False, debug=False):
 		# embed words is of shape [batch_size, time, word_dim]
 		final_states, _ = self.lstm_chain(embed_words, lengths, dummy_input=dummy_input)
 		return final_states
@@ -167,12 +167,15 @@ class EncoderBILSTMPool(EncoderModule):
 										   hidden_size=int(model_params["embed_sent_dim"]/2),
 										   bidirectional=True)
 
-	def forward(self, embed_words, lengths, dummy_input=False):
+	def forward(self, embed_words, lengths, dummy_input=False, debug=False):
 		# embed words is of shape [batch_size * 2, time, word_dim]
 		_, outputs = self.lstm_chain(embed_words, lengths, dummy_input=dummy_input)
 		# Max time pooling
-		pooled_features = EncoderBILSTMPool.pool_over_time(outputs, lengths)
-		return pooled_features
+		pooled_features, pool_indices = EncoderBILSTMPool.pool_over_time(outputs, lengths)
+		if debug:
+			return pooled_features, pool_indices
+		else:
+			return pooled_features
 
 	@staticmethod
 	def pool_over_time(outputs, lengths):
@@ -180,8 +183,8 @@ class EncoderBILSTMPool(EncoderModule):
 		word_positions = torch.arange(start=0, end=time_dim, dtype=lengths.dtype, device=outputs.device)
 		mask = (word_positions.reshape(shape=[1, -1, 1]) < lengths.reshape([-1, 1, 1])).float()
 		outputs = outputs * mask + (torch.min(outputs) - 1) * (1 - mask)
-		final_states, _ = torch.max(outputs, dim=1)
-		return final_states
+		final_states, max_indices = torch.max(outputs, dim=1)
+		return final_states, max_indices
 
 # class EncoderBILSTM(nn.Module):
 

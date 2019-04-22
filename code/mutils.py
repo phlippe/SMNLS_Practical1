@@ -196,8 +196,6 @@ def get_transfer_datasets():
 
 	return transfer_datasets
 
-
-
 def copy_results():
 	checkpoint_folder = sorted(glob("checkpoints/*"))
 	for check_dir in checkpoint_folder:
