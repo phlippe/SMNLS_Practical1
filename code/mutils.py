@@ -23,17 +23,25 @@ from data import load_SNLI_datasets, debug_level, set_debug_level, DatasetTempla
 PARAM_CONFIG_FILE = "param_config.pik"
 
 
-def load_model(checkpoint_path, model=None, optimizer=None, lr_scheduler=None):
+def load_model(checkpoint_path, model=None, optimizer=None, lr_scheduler=None, load_best_model=False):
 	if os.path.isdir(checkpoint_path):
 		checkpoint_files = sorted(glob(os.path.join(checkpoint_path, "*.tar")))
 		if len(checkpoint_files) == 0:
 			return dict()
-		checkpoint_path = checkpoint_files[-1]
-	print("Loading checkpoint \"" + str(checkpoint_path) + "\"")
-	if torch.cuda.is_available():
-		checkpoint = torch.load(checkpoint_path)
+		checkpoint_file = checkpoint_files[-1]
 	else:
-		checkpoint = torch.load(checkpoint_path, map_location='cpu')
+		checkpoint_file = checkpoint_path
+	print("Loading checkpoint \"" + str(checkpoint_file) + "\"")
+	if torch.cuda.is_available():
+		checkpoint = torch.load(checkpoint_file)
+	else:
+		checkpoint = torch.load(checkpoint_file, map_location='cpu')
+	# If best model should be loaded, look for it if checkpoint_path is a directory
+	if os.path.isdir(checkpoint_path) and load_best_model:
+		max_acc = max(checkpoint["eval_accuracies"])
+		best_epoch = checkpoint["eval_accuracies"].index(max_acc) + 1
+		return load_model(os.path.join(checkpoint_path, "checkpoint_" + str(best_epoch).zfill(3) + ".tar"), model=model, optimizer=optimizer, lr_scheduler=lr_scheduler, load_best_model=False)
+
 	if model is not None:
 		pretrained_model_dict = {key: val for key, val in checkpoint['model_state_dict'].items() if not key.startswith("embeddings")}
 		model_dict = model.state_dict()
@@ -50,12 +58,12 @@ def load_model(checkpoint_path, model=None, optimizer=None, lr_scheduler=None):
 			add_param_dict[key] = val
 	return add_param_dict
 
-def load_model_from_args(args, checkpoint_path=None):
+def load_model_from_args(args, checkpoint_path=None, load_best_model=False):
 	model_type, model_params, optimizer_params = args_to_params(args)
 	_, _, _, _, _, wordvec_tensor = load_SNLI_datasets(debug_dataset = False)
 	model = NLIModel(model_type, model_params, wordvec_tensor)
 	if checkpoint_path is not None:
-		load_model(checkpoint_path, model=model)
+		load_model(checkpoint_path, model=model, load_best_model=load_best_model)
 	return model
 
 def load_args(checkpoint_path):
@@ -339,7 +347,7 @@ def sent_eval_to_latex():
 		macro_acc = sum([a * w for a, w in zip(acc_list, weights)]) / sum(weights)
 		s += "%4.2f%% & %4.2f%%" % (micro_acc, macro_acc)
 		s += "\\\\\n" 
-	s = s.replace("%", "\\%").replace("_"," ")
+	s = s.replace("%", "").replace("_"," ")
 	print(s)
 
 def imagecap_to_latex():
@@ -454,7 +462,7 @@ if __name__ == '__main__':
 	# test_for_significance("results/BiLSTM_SGD_1/", "results/LSTM_SGD/")
 	# test_for_significance("results/BiLSTM_Adam_2/", "results/LSTM_Adam/")
 	# test_for_significance("results/BiLSTM_Adam_2/", "results/BiLSTM_SGD_1/")
-	test_for_significance("results/BiLSTM_Max_SGD_v2/", "results/LSTM_Adam/")
-	test_for_significance("results/BiLSTM_Max_SGD_v2_WD/", "results/BiLSTM_Max_SGD_v2/")
-	test_for_significance("results/BiLSTM_Max_SGD_DP/", "results/BiLSTM_Max_SGD_v2/")
-	test_for_significance("results/BiLSTM_Max_SGD_DP/", "results/BiLSTM_Max_Adam/")
+	# test_for_significance("results/BiLSTM_Max_SGD_v2/", "results/LSTM_Adam/")
+	# test_for_significance("results/BiLSTM_Max_SGD_v2_WD/", "results/BiLSTM_Max_SGD_v2/")
+	# test_for_significance("results/BiLSTM_Max_SGD_DP/", "results/BiLSTM_Max_SGD_v2/")
+	# test_for_significance("results/BiLSTM_Max_SGD_DP/", "results/BiLSTM_Max_Adam/")

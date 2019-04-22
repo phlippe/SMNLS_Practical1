@@ -5,7 +5,7 @@ import torch
 import json
 import re
 import sys
-from spellchecker import SpellChecker
+# from spellchecker import SpellChecker
 from random import shuffle
 
 # 0 => Full debug
