@@ -3,7 +3,14 @@
 * _Author_: Phillip Lippe
 
 ## Preparation
-Requirements file to install all needed packages
+In order to run this code, you need to have the following packages installed:
+* PyTorch
+* tensorboardX
+* scipy
+
+Additionally, SentEval needs to be installed to run evaluations with SentEval. You might need to adjust the path to SentEval at the top of file `sent_eval.py`. Make sure that all datasets for the downstream tasks are downloaded.
+
+The data needed to train the model on SNLI are provided [here](https://drive.google.com/open?id=173ZBT5AZwLHMX5bs-gB-h2j5f8TBsOfA). Please store them under the main directory (SMNLS_Practical1/snli_1.0/...). In the same folder, you find files storing the glove embedding. Please download `small_glove_embeds.npy` and `small_glove_embeds.txt` and store them in the code folder. 
 
 
 ## Functionality
@@ -19,6 +26,7 @@ This training framework is splitted into multiple files. Each of these files rep
 * ```model.py```: The network models are implemented in the file _model.py_. Currently, only networks for the task of _Natural Language Inference_ are implemented. Those are all based on the class ```NLIModel```, which separates the network into a encoder and a classifier. Both can be separately configured and implemented. In this practical, we are mainly concerned with the design of the encoder. For extending the framework by a new encoder, please refer to the section _Extending the framework_ below. 
 * ```data.py```: All operations based on the raw data and handling the dataset is summarized in this file. This also includes the processing of the word embeddings. Please refer to the next section _Data pre-processing_ for more information.
 * ```mutils.py```: This file summarizes all basic functionality that is shared among many files. This includes for example the loading of a model, and the parameter configuration. 
+* ```visualizing_max_pooling.py```: All functionality to visualize and analyse the functionality of the max pooling operation in the Bi-LSTM model is summarized in this file.
 
 ### Data pre-processing
 
