@@ -34,7 +34,7 @@ The data pre-processing contains four main steps:
 * **GloVe word embeddings**: First, the token embeddings are loaded from the pre-trained GloVe vectors. Note that s smaller version of GloVe is here used after removing all words that do not occur in either SNLI or any downstream task in SentEval. The functionality for creating such a small embedding is also included in the `data.py` file, but not required if the network is only trained on SNLI and evaluated on SentEval (see downloaded files in the beginning).
 * **Dataset handling with  ```DatasetTemplate```**: The general functionality of a dataset is summarized in the class `DatasetTemplate`. Neither torchtext nor torchnlp is used, as a own dataset function provides the most traceable pre-processing.
 * **Token processing**: To convert a file into a sequence of tokens, the text is splitted along spaces. For the end token, we also consider dots, question marks etc. as separate token. In contrast to the original paper, we also remove any other non-alphabetic letter and split words connected by "-" if they cannot be found in the GloVe word embedding.
-* **Start and end sentence token**: Similar to the original paper, a start of sentence token "<s>" and end of sentence token "</s>" is added to every sentence.
+* **Start and end sentence token**: Similar to the original paper, a start of sentence token and end of sentence token is added to every sentence.
 
 ### Training
 
