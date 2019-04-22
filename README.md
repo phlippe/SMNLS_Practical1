@@ -109,6 +109,7 @@ The options for configuring the evaluation are:
 * ```--checkpoint_path VAL```: The path to the checkpoint folder which should be evaluated. This option also accepts regular expressions like "checkpoints/LSTM\*". If such is specified (note that those have to be in quotation marks to be parsed as string), all folders that correspond to this regex are evaluated.
 * ```--overwrite```: Usually, an evaluation is skipped if the files _evaluation.txt_, _extra\_evaluation.txt_ and _sent\_eval.pik_ exist. If this option is selected, the existing files are ignored and overwritten. 
 * ```--visualize_embeddings```: As described above, this option exports the embeddings of the test subsets for visualization.
+* ```--full_senteval```: If this option is selected, the SentEval will be executed with the heavy parameters as specified by the SentEval paper. Otherwise, the light, fast settings are used.
 
 ### Inference
 
