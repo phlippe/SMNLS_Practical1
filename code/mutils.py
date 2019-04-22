@@ -266,8 +266,10 @@ def results_to_table():
 				s += line.split(" ")[-1].replace("\n","") + " | "
 		with open(os.path.join(res_dir, "sent_eval.pik"), "rb") as f:
 			sent_eval_dict = pickle.load(f)
-		accs = [val["acc"] for key, val in sent_eval_dict.items() if "acc" in val]
-		s += "%4.2f%% | %4.2f%% |" % (sum(accs)/len(accs), sum(accs)/len(accs))
+		accs = [val["acc"] for key, val in sent_eval_dict.items() if "acc" in val and key != "ImageCaptionRetrieval"]
+		weights = [val["ntest"] for key, val in sent_eval_dict.items() if "acc" in val and key != "ImageCaptionRetrieval"]
+		micro_acc = sum([a * w for a, w in zip(accs, weights)]) / sum(weights)
+		s += "%4.2f%% | %4.2f%% |" % (micro_acc, sum(accs)/len(accs))
 		s += "\n"
 	print(s)
 
@@ -285,8 +287,8 @@ def result_to_latex():
 			s += lines[i].split(" ")[-1].replace("\n","") + " & "
 
 		preds = np.load(os.path.join(res_dir, "test_predictions.npy"))
-		macro_acc = get_macro_accuracy(preds, test_labels)
-		s += "%4.2f%% " % (100.0 * macro_acc)
+		micro_acc = get_micro_accuracy(preds, test_labels)
+		s += "%4.2f%% " % (100.0 * micro_acc)
 
 		s += "\\\\\n"
 	s = s.replace("%", "\\%").replace("_"," ")
@@ -343,8 +345,8 @@ def sent_eval_to_latex():
 			elif 'all' in sample_dict[task_key]:
 				s += "%4.2f/%4.2f" % (sample_dict[task_key]["all"]["pearson"]["wmean"], sample_dict[task_key]["all"]["spearman"]["wmean"])
 			s +=  " & "
-		micro_acc = sum(acc_list) / len(acc_list)
-		macro_acc = sum([a * w for a, w in zip(acc_list, weights)]) / sum(weights)
+		macro_acc = sum(acc_list) / len(acc_list)
+		micro_acc = sum([a * w for a, w in zip(acc_list, weights)]) / sum(weights)
 		s += "%4.2f%% & %4.2f%%" % (micro_acc, macro_acc)
 		s += "\\\\\n" 
 	s = s.replace("%", "").replace("_"," ")
@@ -390,7 +392,7 @@ def extra_eval_to_latex():
 	s = s.replace("%", "\\%").replace("_"," ")
 	print(s)
 
-def get_macro_accuracy(preds, labels):
+def get_micro_accuracy(preds, labels):
 	accs = list()
 	for lab_index in set(labels):
 		num_labs = np.sum(labels == lab_index)
@@ -445,16 +447,16 @@ def sign_test(results_1, results_2):
 
 if __name__ == '__main__':
 	# copy_results()
-	# results_to_table()
+	results_to_table()
+	print("\n\n")
+	sent_eval_to_table()
+	# result_to_latex()
 	# print("\n\n")
-	# sent_eval_to_table()
-	result_to_latex()
-	print("\n\n")
-	sent_eval_to_latex()
-	print("\n\n")
-	imagecap_to_latex()
-	print("\n\n")
-	extra_eval_to_latex()
+	# sent_eval_to_latex()
+	# print("\n\n")
+	# imagecap_to_latex()
+	# print("\n\n")
+	# extra_eval_to_latex()
 
 	# test_for_significance("results/Baseline/", "results/BiLSTM_Max_Adam/")
 	# test_for_significance("results/LSTM_SGD/", "results/Baseline/")

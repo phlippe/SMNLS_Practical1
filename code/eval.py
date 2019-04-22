@@ -167,6 +167,10 @@ class SNLIEval:
 		best_epoch = final_dict["eval_accuracies"].index(max_acc) + 1
 		load_model(os.path.join(checkpoint_path, "checkpoint_" + str(best_epoch).zfill(3) + ".tar"), model=self.model)
 
+		for name, param in self.model.named_parameters():
+			print(name)
+			writer.add_histogram(name, param.data.view(-1))
+
 		visualize_tSNE(self.model, self.test_easy_dataset, writer, embedding_name="Test set easy", add_reduced_version=True)
 		visualize_tSNE(self.model, self.test_hard_dataset, writer, embedding_name="Test set hard", add_reduced_version=True)
 		if additional_datasets is not None:
