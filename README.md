@@ -98,7 +98,7 @@ This training framework is splitted into multiple files. Each of these files rep
 
 Models can be evaluated with the file ```eval.py```. Thereby, the best checkpoint is tested on the train, validation and test dataset, and the results will be exported to the file _evaluation.txt_ in the same checkpoint folder. Additionally, the model is tested separately on an easy and hard subset of the test dataset as specified on the [SNLI dataset website](https://nlp.stanford.edu/projects/snli/). These scores are stored in a separate file called _extra\_evaluation.txt_. 
 
-To visualize the embeddings learned by the model, the two subsets of the test dataset can be exported to a tensorboard. In that, tSNE and PCA can be performed to find certain patterns in the data. This evaluation can be selected with the option ```--visualize_embeddings```. The tensorboard file is exported in the same checkpoint folder.
+To visualize the embeddings learned by the model, the two subsets of the test dataset and some SentEval downstream tasks can be exported to a tensorboard. In that, tSNE and PCA can be performed to find certain patterns in the data. This evaluation can be selected with the option ```--visualize_embeddings```. The tensorboard file is exported in the same checkpoint folder.
 
 Furthermore, the model is tested on a bunch of [SentEval](https://github.com/facebookresearch/SentEval) tasks as specified in the [InferSent]() paper: 'MR', 'CR', 'SUBJ', 'MPQA', 'SST2', 'TREC', 'MRPC', 'SICKEntailment', 'SICKRelatedness', 'STS14'. The results are saved in a dictionary as pickle file called _sent\_eval.pik_. 
 
@@ -201,3 +201,4 @@ A new classifier can be similarly added as a new encoder. However, if the classi
 
 ### Visualization
 
+The evaluation offers the option `--visualize_embeddings`. In this, the embeddings are exported to tensorboard in which a tSNE analysis can be executed (use the tab _Projector_ for that). Example results can be found in the 1-page report.
