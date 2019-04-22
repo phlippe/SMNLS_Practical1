@@ -1,6 +1,6 @@
 # SMNLS Practical 1
 * _Course_: Stochastical Methods in Natural Language Semantics
-* _Author_: Phillip Lippe
+* _Author_: Phillip Lippe (Contact: phillip.lippe@googlemail.com)
 
 ## Preparation
 In order to run this code, you need to have the following packages installed:
