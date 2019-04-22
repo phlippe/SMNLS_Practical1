@@ -75,7 +75,7 @@ def perform_SentEval(model, fast_eval=False):
 										 'tenacity': 3, 'epoch_size': 2}
 		transfer_tasks = ['MR', 'CR', 'SUBJ', 'MPQA', 'SST2', 'TREC', 'MRPC', 'SICKEntailment', 'SICKRelatedness', 'STS14']
 	else:
-		params_senteval = {'task_path': PATH_TO_DATA, 'usepytorch': torch.cuda.is_available(), 'kfold': 10}
+		params_senteval = {'task_path': PATH_TO_DATA, 'usepytorch': torch.cuda.is_available(), 'kfold': 5}
 		params_senteval['classifier'] = {'nhid': 0, 'optim': 'adam', 'batch_size': 64, 'tenacity': 5, 'epoch_size': 4}
 		transfer_tasks = ['MR', 'CR', 'SUBJ', 'MPQA', 'SST2', 'TREC', 'MRPC', 'SICKEntailment', 'SICKRelatedness', 'STS14', 'ImageCaptionRetrieval']
 		

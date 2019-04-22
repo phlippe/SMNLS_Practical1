@@ -10,6 +10,10 @@ import sys
 import json
 import pickle
 import copy
+from decimal import Decimal
+from scipy.misc import comb
+import math
+import scipy
 from glob import glob
 from shutil import copyfile
 
@@ -259,11 +263,35 @@ def results_to_table():
 		s += "\n"
 	print(s)
 
+def result_to_latex():
+	_, _, test_dataset, _, _, _ = load_SNLI_datasets(debug_dataset = True)
+	test_labels = np.array([d.label for d in test_dataset.data_list])
+	result_folder = sorted(glob("results/*"))
+	s = " & ".join(["\\textbf{%s}" % (column_name) for column_name in ["Model","Train", "Val", "Test mic", "Test mac"]]) + "\\\\\n\\hline\n"
+	for res_dir in result_folder:
+		s += res_dir.split("/")[-1] + " & "
+		with open(os.path.join(res_dir, "evaluation.txt"), "r") as f:
+			lines = f.readlines()
+
+		for i in [1, 2, 3]:
+			s += lines[i].split(" ")[-1].replace("\n","") + " & "
+
+		preds = np.load(os.path.join(res_dir, "test_predictions.npy"))
+		macro_acc = get_macro_accuracy(preds, test_labels)
+		s += "%4.2f%% " % (100.0 * macro_acc)
+
+		s += "\\\\\n"
+	s = s.replace("%", "\\%").replace("_"," ")
+	print(s)
+
 def sent_eval_to_table():
 	result_folder = sorted(glob("results/*"))
 	with open(os.path.join(result_folder[0], "sent_eval.pik"), "rb") as f:
 		sample_dict = pickle.load(f)
 	task_list = list(sample_dict.keys())
+	if "ImageCaptionRetrieval" in task_list:
+		task_list.remove("ImageCaptionRetrieval")
+	
 	s = "| Experiment names | " + " | ".join(task_list) + " |\n"
 	s += "| " + " | ".join(["---"]*(len(task_list)+1)) + " |\n"
 	for res_dir in result_folder:
@@ -278,15 +306,155 @@ def sent_eval_to_table():
 			elif 'all' in sample_dict[task_key]:
 				s += "%4.2f/%4.2f" % (sample_dict[task_key]["all"]["pearson"]["wmean"], sample_dict[task_key]["all"]["spearman"]["wmean"])
 			s +=  " | "
-		s += "\n"
+		s += "\n" 
 	print(s)
 
+def sent_eval_to_latex():
+	result_folder = sorted(glob("results/*"))
+	with open(os.path.join(result_folder[0], "sent_eval.pik"), "rb") as f:
+		sample_dict = pickle.load(f)
+	task_list = list(sample_dict.keys())
+	if "ImageCaptionRetrieval" in task_list:
+		task_list.remove("ImageCaptionRetrieval")
+	
+	s = " & ".join("\\textbf{%s}" % (column_name) for column_name in ["Model"] + task_list + ["Micro", "Macro"]) + "\\\\\n\\hline\n"
+	
+	for res_dir in result_folder:
+		s += res_dir.split("/")[-1] + " & "
+		with open(os.path.join(res_dir, "sent_eval.pik"), "rb") as f:
+			sample_dict = pickle.load(f)
+		acc_list = list()
+		weights = list()
+		for task_key in task_list:
+			if "acc" in sample_dict[task_key]:
+				s +=  "%4.2f%%" % (sample_dict[task_key]["acc"]) + ("/%4.2f%%" % (sample_dict[task_key]["f1"]) if "f1" in sample_dict[task_key] else "")
+				acc_list.append(sample_dict[task_key]["acc"])
+				weights.append(sample_dict[task_key]["ntest"])
+			elif "pearson" in sample_dict[task_key]:
+				s += "%4.3f" % (sample_dict[task_key]["pearson"])
+			elif 'all' in sample_dict[task_key]:
+				s += "%4.2f/%4.2f" % (sample_dict[task_key]["all"]["pearson"]["wmean"], sample_dict[task_key]["all"]["spearman"]["wmean"])
+			s +=  " & "
+		micro_acc = sum(acc_list) / len(acc_list)
+		macro_acc = sum([a * w for a, w in zip(acc_list, weights)]) / sum(weights)
+		s += "%4.2f%% & %4.2f%%" % (micro_acc, macro_acc)
+		s += "\\\\\n" 
+	s = s.replace("%", "\\%").replace("_"," ")
+	print(s)
 
+def imagecap_to_latex():
+	result_folder = sorted(glob("results/*"))
+	with open(os.path.join(result_folder[0], "sent_eval.pik"), "rb") as f:
+		sample_dict = pickle.load(f)
+	task_list = list(sample_dict.keys())
+	if "ImageCaptionRetrieval" in task_list:
+		task_list.remove("ImageCaptionRetrieval")
+	
+	s = " & ".join("\\textbf{%s}" % (column_name) for column_name in ["Model", "R@1", "R@5", "R@10", "Med r", "R@1", "R@5", "R@10", "Med r"]) + "\\\\\n\\hline\n"
+	
+	for res_dir in result_folder:
+		with open(os.path.join(res_dir, "sent_eval.pik"), "rb") as f:
+			sample_dict = pickle.load(f)
+		if not "ImageCaptionRetrieval" in sample_dict:
+			continue
+		s += res_dir.split("/")[-1] + " & "
+		sample_dict = sample_dict["ImageCaptionRetrieval"]["acc"]
+		s += "%4.2f%% & %4.2f%% & %4.2f%% & %1.1f & %4.2f%% & %4.2f%% & %4.2f%% & %1.1f" % (sample_dict[0][0], sample_dict[0][1], sample_dict[0][2], sample_dict[0][3], sample_dict[1][0], sample_dict[1][1], sample_dict[1][2], sample_dict[1][3])
+		s += "\\\\\n" 
+	s = s.replace("%", " ").replace("_"," ")
+	print(s)
 
+def extra_eval_to_latex():
+	# _, _, test_dataset, _, _, _ = load_SNLI_datasets(debug_dataset = True)
+	# test_labels = np.array([d.label for d in test_dataset.data_list])
+	result_folder = sorted(glob("results/*"))
+	s = " & ".join(["\\textbf{%s}" % (column_name) for column_name in ["Model","Test easy", "Test hard", "Test combined"]]) + "\\\\\n\\hline\n"
+	for res_dir in result_folder:
+		s += res_dir.split("/")[-1] + " & "
+		with open(os.path.join(res_dir, "extra_evaluation.txt"), "r") as f:
+			lines = f.readlines()
+		s += " & ".join([lines[i].split(" ")[-1].replace("\n","") for i in range(len(lines))])
+		
+		with open(os.path.join(res_dir, "evaluation.txt"), "r") as f:
+			lines = f.readlines()
+		s += " & " + lines[-1].split(" ")[-1].replace("\n","")
+		s += "\\\\\n"
+	s = s.replace("%", "\\%").replace("_"," ")
+	print(s)
+
+def get_macro_accuracy(preds, labels):
+	accs = list()
+	for lab_index in set(labels):
+		num_labs = np.sum(labels == lab_index)
+		accs.append(np.sum(np.logical_and(preds == lab_index, labels == lab_index)) / num_labs)
+	return sum(accs) / len(accs)
+
+def test_for_significance(checkpoint_path_1, checkpoint_path_2):
+	print("Comparing " + str(checkpoint_path_1) + " and " + str(checkpoint_path_2))
+	_, _, test_dataset, _, _, _ = load_SNLI_datasets(debug_dataset = True)
+	test_labels = np.array([d.label for d in test_dataset.data_list])
+	preds_1 = np.load(os.path.join(checkpoint_path_1, "test_predictions.npy"))
+	preds_2 = np.load(os.path.join(checkpoint_path_2, "test_predictions.npy"))
+	preds_correct_1 = (preds_1 == test_labels)
+	preds_correct_2 = (preds_2 == test_labels)
+	sign_test(preds_correct_1, preds_correct_2)
+
+def sign_test(results_1, results_2):
+	# Function from NLP 1 practical
+    """test for significance
+    results_1 is a list of classification results (+ for correct, - incorrect)
+    results_2 is a list of classification results (+ for correct, - incorrect)
+    """
+    ties, plus, minus = 0, 0, 0
+
+    # "-" carries the error
+    for i in range(0, len(results_1)):
+        if results_1[i]==results_2[i]:
+            ties += 1
+        elif results_1[i]==0: 
+            plus += 1
+        elif results_2[i]==0: 
+            minus += 1
+    n = 2 * math.ceil(ties/2.0) + plus + minus
+    k = math.ceil(ties/2.0) + min(plus, minus)
+    # Print number of ties, plus and minus for debugging
+    # print("Ties: " + str(ties) + ", Plus: " + str(plus) + ", Minus: " + str(minus) + " => " + "N: " + str(n) + ", K: " + str(k))
+    
+    summation = Decimal(0.0)
+    for i in range(0,int(k)+1):
+        # Use the exact value of the comb function and convert it to a decimal
+        summation += Decimal(scipy.special.comb(n,i,exact=True))
+
+    # use two-tailed version of test
+    summation *= 2
+    summation *= (Decimal(0.5)**Decimal(n))
+    
+  
+    print("the difference is", 
+        "not significant" if summation >= 0.05 else "significant")    
+    print("p_value = %.5f" % summation)
+    return summation
 
 if __name__ == '__main__':
-	copy_results()
+	# copy_results()
 	# results_to_table()
 	# print("\n\n")
 	# sent_eval_to_table()
+	result_to_latex()
+	print("\n\n")
+	sent_eval_to_latex()
+	print("\n\n")
+	imagecap_to_latex()
+	print("\n\n")
+	extra_eval_to_latex()
 
+	# test_for_significance("results/Baseline/", "results/BiLSTM_Max_Adam/")
+	# test_for_significance("results/LSTM_SGD/", "results/Baseline/")
+	# test_for_significance("results/LSTM_SGD/", "results/LSTM_Adam/")
+	# test_for_significance("results/BiLSTM_SGD_1/", "results/LSTM_SGD/")
+	# test_for_significance("results/BiLSTM_Adam_2/", "results/LSTM_Adam/")
+	# test_for_significance("results/BiLSTM_Adam_2/", "results/BiLSTM_SGD_1/")
+	test_for_significance("results/BiLSTM_Max_SGD_v2/", "results/LSTM_Adam/")
+	test_for_significance("results/BiLSTM_Max_SGD_v2_WD/", "results/BiLSTM_Max_SGD_v2/")
+	test_for_significance("results/BiLSTM_Max_SGD_DP/", "results/BiLSTM_Max_SGD_v2/")
+	test_for_significance("results/BiLSTM_Max_SGD_DP/", "results/BiLSTM_Max_Adam/")

@@ -6,6 +6,7 @@ import os
 import sys
 import json
 import pickle
+import numpy as np
 from glob import glob
 
 from model import NLIModel
@@ -27,7 +28,7 @@ class SNLIEval:
 		self.batch_size = batch_size
 		self.accuracies = dict()
 
-	def eval(self, iteration=None, dataset=None):
+	def eval(self, iteration=None, dataset=None, ret_pred_list=False):
 		if dataset is None:
 			dataset = self.val_dataset
 		self.model.eval()
@@ -47,7 +48,10 @@ class SNLIEval:
 		print("Number of predictions: " + ", ".join([("class %i: %i" % (i, sum([j==i for j in preds_list]))) for i in range(3)]))
 		if iteration is not None:
 			self.accuracies[iteration] = accuracy
-		return accuracy
+		if not ret_pred_list:
+			return accuracy
+		else:
+			return accuracy, preds_list
 
 	def test_best_model(self, checkpoint_path, delete_others=False, run_standard_eval=True, run_training_set=False, run_sent_eval=True, run_extra_eval=True, light_senteval=True):
 		final_dict = load_model(checkpoint_path)
@@ -69,10 +73,11 @@ class SNLIEval:
 				# Load best checkpoint again
 				load_model(best_checkpoint_path, model=self.model)
 			val_acc = self.eval(dataset=self.val_dataset)
-			test_acc = self.eval(dataset=self.test_dataset)
+			test_acc, pred_list = self.eval(dataset=self.test_dataset, ret_pred_list=True)
 			if abs(val_acc - max_acc) > 0.0005:
 				print("[!] ERROR: Found different accuracy then reported in the final state dict. Difference: %f" % (100.0 * abs(val_acc - max_acc)) ) 
 				return 
+			np.save(os.path.join(checkpoint_path, "test_predictions.npy"), np.array(pred_list))
 			if run_training_set:
 				s += ("Train accuracy: %4.2f%%" % (train_acc * 100.0)) + "\n"
 			s += ("Val accuracy: %4.2f%%" % (val_acc * 100.0)) + "\n"
@@ -196,7 +201,7 @@ if __name__ == '__main__':
 			evaluater = SNLIEval(model)
 			evaluater.test_best_model(model_checkpoint, 
 									  run_standard_eval=(not skip_standard_eval), 
-									  run_training_set=False,
+									  run_training_set=True,
 									  run_sent_eval=(not skip_sent_eval),
 									  run_extra_eval=(not skip_extra_eval),
 									  light_senteval=(not args.full_senteval))

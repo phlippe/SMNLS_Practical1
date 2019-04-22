@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 from glob import glob
 from shutil import copyfile
 
+from tensorboardX import SummaryWriter
+
 from model import NLIModel
 from data import load_SNLI_datasets, debug_level, set_debug_level, DatasetTemplate, SentData
 from mutils import load_model, load_model_from_args, load_args, args_to_params
@@ -36,7 +38,7 @@ def retrieve_word_importance(model, dataset, batch_size=64, output_path="", over
 		word_occurences = loaded_np_file['occurences']
 		word_max_index = loaded_np_file['indices']
 	else:
-		number_batches = 10 # int(math.ceil(dataset.get_num_examples()/batch_size))
+		number_batches = int(math.ceil(dataset.get_num_examples()/batch_size))
 		for i in range(number_batches):
 			print("Processed %4.2f%% of dataset" % (i*100.0/number_batches), end="\r") 
 			embeds, lengths, _ = dataset.get_batch(batch_size=batch_size, loop_dataset=False, toTorch=True)
@@ -61,23 +63,24 @@ def retrieve_word_importance(model, dataset, batch_size=64, output_path="", over
 	# visualize_word_distribution(word_frequency, "bikinis", file_path=os.path.join(output_path, "word_dist_bikinis.pdf"))
 	# visualize_word_distribution(word_frequency, "as", file_path=os.path.join(output_path, "word_dist_as.pdf"))
 	# visualize_word_distribution(word_frequency, "like", file_path=os.path.join(output_path, "word_dist_like.pdf"))
-	export_sample_word_per_feature(word_frequency)
+	export_sample_word_per_feature(word_frequency, word_occurences, N=25)
+	return word_frequency, word_occurences
 
 
 def print_top_bottom(word_importance, word_occurences, N=25):	
 	_, _, _, _, word2id, _ = load_SNLI_datasets(debug_dataset = False)
 	id2word = {v:k for k,v in word2id.items()}
 	
-	word_importance_sort_ascending = np.array([x for x in np.argsort(word_importance) if word_occurences[x] > 0])
+	word_importance_sort_ascending = np.array([x for x in np.argsort(word_importance) if word_occurences[x] > 100])
 	word_importance_sort_descending = word_importance_sort_ascending[::-1]
 	print("="*50+"\nMost important words\n" + "="*50)
 	for i in range(N):
 		word_id = word_importance_sort_descending[i]
-		print("Top %i: %s (%4.2f%%)" % (i, str(id2word[word_id]), 100.0 * word_importance[word_id]))
+		print("Top %i: %s (%4.2f%% in %i sentences)" % (i, str(id2word[word_id]), 100.0 * word_importance[word_id], word_occurences[word_id]))
 	print("="*50+"\nLeast important words\n" + "="*50)
 	for i in range(N):
 		word_id = word_importance_sort_ascending[i]
-		print("Bottom %i: %s (%4.2f%%)" % (i, str(id2word[word_id]), 100.0 * word_importance[word_id]))
+		print("Bottom %i: %s (%4.2f%% in %i sentences)" % (i, str(id2word[word_id]), 100.0 * word_importance[word_id], word_occurences[word_id]))
 
 
 def visualize_single_sentence(model, sentence, file_path=None):
@@ -125,10 +128,11 @@ def visualize_word_distribution(word_frequency, word, file_path=None):
 		plt.close()
 
 
-def export_sample_word_per_feature(word_frequency, output_path="", N=10):
+def export_sample_word_per_feature(word_frequency, word_occurences, output_path="", N=10, min_occ=100):
 	_, _, _, _, word2id, _ = load_SNLI_datasets(debug_dataset = False)
 	id2word = {v:k for k,v in word2id.items()}
 
+	word_frequency = word_frequency * (word_occurences[:,None] > min_occ) # Masking rare words
 	s = "="*50+"\nWords to feature mapping\n" + "="*50+"\n"
 	for i in range(word_frequency.shape[1]):
 		print("Processing feature %i..." % (i+1), end="\r")
@@ -139,15 +143,37 @@ def export_sample_word_per_feature(word_frequency, output_path="", N=10):
 		f.write(s)
 
 
+def visualize_embeddings(word_frequency, word_occurences, tensorboard_writer, max_examples=4000):
+	_, _, _, _, word2id, _ = load_SNLI_datasets(debug_dataset = False)
+	id2word = {v:k for k,v in word2id.items()}
+
+	most_frequent_words = np.argsort(word_occurences)[::-1]
+	most_frequent_words = most_frequent_words[:max_examples]
+	print("Using all words with a frequency of more than %i." % (word_occurences[most_frequent_words[-1]]))
+
+	embeddings = word_frequency[most_frequent_words]
+	labels = [id2word[w] for w in most_frequent_words]
+	tensorboard_writer.add_embedding(embeddings, metadata=labels, tag="MaxPoolDistribution", global_step=None)
+
+
+
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--checkpoint_path", help="Folder(name) where checkpoints are saved", type=str, required=True)
+	parser.add_argument("--overwrite", help="Whether to re-create the distributions if they are already in the folder or not", action="store_true")
 	args = parser.parse_args()
 	model = load_model_from_args(load_args(args.checkpoint_path), args.checkpoint_path)
 
 	train_dataset, val_dataset, test_dataset, _, _, _ = load_SNLI_datasets(debug_dataset = True)
+	dataset = copy.deepcopy(test_dataset)
+	dataset.set_data_list(train_dataset.data_list + val_dataset.data_list + test_dataset.data_list)
 
-	retrieve_word_importance(model, val_dataset)
+	if os.path.isfile(args.checkpoint_path):
+		output_path = args.checkpoint_path.rsplit("/",1)[0]
+	else:
+		output_path = args.checkpoint_path
+	word_freq, word_occ = retrieve_word_importance(model, dataset, output_path=output_path, overwrite=args.overwrite)
 	# visualize_single_sentence(model, "Two women are sleeping in their bikinis on a beach .")
-
+	# writer = SummaryWriter(args.checkpoint_path)
+	# visualize_embeddings(word_freq, word_occ, writer)
