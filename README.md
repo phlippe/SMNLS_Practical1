@@ -144,13 +144,29 @@ python train.py --model 3 --optimizer 0 --learning_rate 0.1 --weight_decay 1e-5 
 
 ## Extending the framework
 
+The framework is created very modular, so that it can be easily extended. A short description how, and where to add new aspects.
+
 ### Adding new dataset
+
+The datasets are summarized in the file `data.py`. In order to add a new dataset, create a new class in this file which inherits from the class `DatasetTemplate`. If the data simply consists of a single sentence and a label, you can also use the class `DatasetTemplate` directly and create a new instance of it. The single data objects are from type `SentData`. For an example, please have a look in the file `mutils.py`, function `def get_transfer_datasets()`.
 
 ### Adding new encoder
 
+New models can be implemented in the file `model.py`. Specifically, a new encoder for the NLI task has to inherit the class `EncoderModule`. In there, define a forward pass and a initialization which has access to the model parameters (see `mutils.py` function `def args_to_params(args)` for details). Also, add a new constant in the class `NLIModel` similar to `AVERAGE_WORD_VECS, LSTM, BILSTM, BILSTM_MAX`, and add a corresonding line in the function `_choose_encoder` (replacing the constant `NEW_MODEL` and the class name `NewEncoder`):
+
+```python
+def _choose_encoder(self, model_type, model_params):
+	...
+	elif model_type == NLIModel.NEW_MODEL:
+		self.encoder = NewEncoder(model_params)
+	...
+```
+
+From the train function, you can now select the new encoder by setting the option `--model VAL` to the value specified by the new constant in `NLIModel` (constant `NEW_MODEL` in the previous example).
+
 ### Adding new classifier
 
-### Adding new evaluation
+A new classifier can be similarly added as a new encoder. However, if the classifier only slightly differs from the MLP (or is just a specific parameterization of it), you can extend the class `NLIClassifier` for that. 
 
 ## Results/Visualization
 
@@ -160,75 +176,28 @@ python train.py --model 3 --optimizer 0 --learning_rate 0.1 --weight_decay 1e-5 
 
 | Experiment names | Train | Val | Test | Test easy | Test hard | Micro | Macro |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Baseline | 66.52% | 67.79% | 67.65% | 0.80% | 0.43% | 80.90% | 80.90% |
-| BiLSTM_Adam | 90.65% | 82.93% | 82.26% | 0.91% | 0.65% | 80.77% | 80.77% |
-| BiLSTM_Adam_1 |  - | 83.13% | 82.77% | 91.41% | 65.38% | 81.40% | 81.40% |
-| BiLSTM_Adam_2 |  - | 82.99% | 82.64% | 91.56% | 64.70% | 81.98% | 81.98% |
-| BiLSTM_Adam_2048 | 87.93% | 82.57% | 82.27% | 0.91% | 0.64% | 80.66% | 80.66% |
-| BiLSTM_Max_Adam | 92.13% | 85.00% | 84.99% | 0.93% | 0.70% | 82.94% | 82.94% |
-| BiLSTM_Max_SGD_DP | 93.70% | 84.56% | 85.41% | 0.93% | 0.70% | 83.00% | 83.00% |
-| BiLSTM_Max_SGD_LowLR |  - | 84.14% | 84.36% | 92.96% | 67.07% | 83.06% | 83.06% |
-| BiLSTM_Max_SGD_Mom | 90.01% | 82.50% | 81.83% | 0.92% | 0.70% | 82.92% | 82.92% |
-| BiLSTM_Max_SGD_NoLR | 83.43% | 81.57% | 80.88% | 0.90% | 0.63% | 78.38% | 78.38% |
-| BiLSTM_Max_SGD_Seed1 |  - | 84.51% | 84.23% | 91.62% | 69.37% | 82.98% | 82.98% |
-| BiLSTM_Max_SGD_Seed2 |  - | 84.46% | 84.54% | 92.03% | 69.46% | 83.08% | 83.08% |
-| BiLSTM_Max_SGD_v2 | 96.41% | 84.23% | 84.15% | 0.92% | 0.69% | 83.49% | 83.49% |
-| BiLSTM_Max_SGD_v2_123 | 90.85% | 84.26% | 84.13% | 0.92% | 0.68% | 82.21% | 82.21% |
-| BiLSTM_Max_SGD_v2_WD | 94.47% | 84.76% | 84.85% | 0.92% | 0.70% | 83.12% | 83.12% |
-| BiLSTM_SGD | 86.60% | 81.89% | 81.49% | 0.90% | 0.63% | 78.69% | 78.69% |
-| BiLSTM_SGD_1 |  - | 81.51% | 81.25% | 90.25% | 63.14% | 81.30% | 81.30% |
-| BiLSTM_SGD_2 |  - | 81.84% | 81.15% | 90.00% | 63.32% | 81.13% | 81.13% |
-| BiLSTM_SGD_2048 | 87.39% | 82.20% | 81.13% | 0.90% | 0.63% | 78.62% | 78.62% |
-| BiLSTM_SGD_WD |  - | 81.77% | 81.32% | 89.97% | 63.91% | 80.74% | 80.74% |
-| LSTM_Adam | 88.18% | 82.90% | 82.78% | 0.92% | 0.65% | 80.26% | 80.26% |
-| LSTM_SGD | 86.84% | 82.34% | 81.39% | 0.90% | 0.64% | 77.89% | 77.89% |
-
+| Baseline | 66.49% | 67.79% | 67.65% | 79.98% | 42.84% | 83.08% | 80.76% |
+| BiLSTM_Adam_2 | 99.38% | 82.99% | 82.64% | 91.56% | 64.70% | 83.27% | 82.09% |
+| BiLSTM_Max_Adam | 99.98% | 85.00% | 84.99% | 92.63% | 69.61% | 84.92% | 83.65% |
+| BiLSTM_Max_SGD_DP | 96.91% | 84.57% | 85.41% | 93.22% | 69.70% | 85.28% | 84.22% |
+| BiLSTM_Max_SGD_v2 | 99.06% | 84.23% | 84.15% | 91.70% | 68.97% | 85.09% | 84.05% |
+| BiLSTM_Max_SGD_v2_WD | 98.49% | 84.76% | 84.85% | 92.27% | 69.92% | 85.03% | 83.76% |
+| BiLSTM_SGD_1 | 97.99% | 81.51% | 81.25% | 90.25% | 63.14% | 83.26% | 82.38% |
+| LSTM_Adam | 99.17% | 82.89% | 82.78% | 91.68% | 64.86% | 82.81% | 80.46% |
+| LSTM_SGD | 89.70% | 82.34% | 81.39% | 90.13% | 63.81% | 81.23% | 79.06% |
 
 #### SentEval
-
-|  Experiment names | MR | CR | SUBJ | MPQA | SST2 | TREC | MRPC | SICKEntailment | SICKRelatedness | STS14 |
+| Experiment names | MR | CR | SUBJ | MPQA | SST2 | TREC | MRPC | SICKEntailment | SICKRelatedness | STS14 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Baseline | 77.10% | 77.43% | 91.11% | 87.26% | 81.88% | 79.80% | 73.80%/81.86% | 78.85% | 0.80 | 0.54/0.55 | 
-| BiLSTM_Adam | 76.32% | 79.05% | 88.13% | 87.94% | 81.33% | 77.80% | 72.87%/81.52% | 82.73% | 0.86 | 0.63/0.61 | 
-| BiLSTM_Adam_1 | 75.37% | 78.99% | 89.73% | 87.88% | 80.07% | 86.20% | 69.86%/75.52% | 83.07% | 0.87 | 0.60/0.58 | 
-| BiLSTM_Adam_2 | 75.11% | 78.01% | 89.73% | 88.09% | 80.56% | 85.60% | 74.90%/82.63% | 83.88% | 0.87 | 0.59/0.58 | 
-| BiLSTM_Adam_2048 | 74.85% | 78.73% | 87.93% | 87.94% | 79.13% | 78.80% | 73.62%/81.44% | 84.29% | 0.86 | 0.61/0.60 | 
-| BiLSTM_Max_Adam | 76.07% | 80.98% | 90.72% | 88.89% | 82.65% | 85.40% | 73.45%/81.83% | 85.33% | 0.89 | 0.70/0.68 | 
-| BiLSTM_Max_SGD_DP | 76.40% | 81.59% | 92.07% | 88.06% | 80.62% | 87.80% | 71.36%/77.15% | 86.12% | 0.89 | 0.69/0.66 | 
-| BiLSTM_Max_SGD_LowLR | 75.70% | 80.00% | 91.49% | 88.30% | 80.12% | 88.80% | 74.67%/82.16% | 85.43% | 0.89 | 0.67/0.65 | 
-| BiLSTM_Max_SGD_Mom | 76.67% | 77.22% | 91.34% | 87.95% | 83.14% | 89.00% | 71.83%/77.93% | 86.22% | 0.89 | 0.68/0.66 | 
-| BiLSTM_Max_SGD_NoLR | 72.94% | 74.01% | 85.67% | 87.24% | 77.27% | 73.60% | 73.04%/81.70% | 83.30% | 0.86 | 0.59/0.58 | 
-| BiLSTM_Max_SGD_Seed1 | 75.97% | 79.02% | 91.56% | 87.69% | 81.93% | 89.20% | 72.64%/79.10% | 85.83% | 0.89 | 0.68/0.65 | 
-| BiLSTM_Max_SGD_Seed2 | 76.25% | 80.00% | 91.66% | 88.14% | 80.67% | 88.60% | 73.68%/81.30% | 85.61% | 0.89 | 0.67/0.65 | 
-| BiLSTM_Max_SGD_v2 | 76.98% | 80.40% | 91.92% | 88.33% | 81.82% | 89.00% | 73.57%/79.89% | 85.91% | 0.89 | 0.68/0.66 | 
-| BiLSTM_Max_SGD_v2_123 | 75.57% | 77.70% | 91.28% | 88.01% | 81.49% | 88.00% | 69.74%/75.10% | 85.87% | 0.89 | 0.68/0.65 | 
-| BiLSTM_Max_SGD_v2_WD | 76.36% | 79.36% | 91.33% | 88.08% | 82.15% | 89.40% | 73.39%/81.24% | 84.90% | 0.89 | 0.68/0.65 | 
-| BiLSTM_SGD | 72.19% | 76.19% | 85.78% | 87.10% | 76.99% | 74.80% | 72.99%/81.15% | 83.50% | 0.87 | 0.60/0.58 | 
-| BiLSTM_SGD_1 | 73.15% | 77.61% | 89.39% | 86.69% | 77.54% | 86.00% | 74.26%/81.39% | 85.75% | 0.87 | 0.61/0.59 | 
-| BiLSTM_SGD_2 | 74.29% | 77.75% | 89.06% | 87.50% | 78.31% | 86.00% | 71.59%/77.93% | 84.57% | 0.88 | 0.60/0.58 | 
-| BiLSTM_SGD_2048 | 73.28% | 76.32% | 85.27% | 87.13% | 77.65% | 74.80% | 72.46%/79.80% | 82.08% | 0.86 | 0.61/0.59 | 
-| BiLSTM_SGD_WD | 73.19% | 77.09% | 88.36% | 86.82% | 78.42% | 84.60% | 72.52%/79.36% | 84.92% | 0.87 | 0.60/0.58 | 
-| LSTM_Adam | 75.17% | 78.59% | 87.91% | 87.91% | 79.35% | 77.60% | 72.12%/80.94% | 83.40% | 0.86 | 0.62/0.60 | 
-| LSTM_SGD | 72.68% | 75.20% | 85.49% | 87.09% | 77.43% | 70.40% | 72.17%/79.68% | 82.69% | 0.86 | 0.59/0.58 | 
-
+| Baseline | 77.14% | 77.24% | 91.14% | 87.27% | 81.11% | 79.20% | 73.45%/81.80% | 79.54% | 0.80 | 0.54/0.55 | 
+| BiLSTM_Adam_2 | 75.96% | 79.12% | 89.76% | 87.86% | 81.22% | 85.20% | 74.84%/82.24% | 82.77% | 0.87 | 0.59/0.58 | 
+| BiLSTM_Max_Adam | 77.72% | 81.27% | 91.45% | 88.94% | 83.47% | 86.60% | 74.26%/82.49% | 85.49% | 0.89 | 0.70/0.68 | 
+| BiLSTM_Max_SGD_DP | 78.04% | 81.99% | 92.09% | 88.63% | 81.44% | 89.00% | 75.83%/83.22% | 86.77% | 0.89 | 0.69/0.66 | 
+| BiLSTM_Max_SGD_v2 | 78.08% | 81.19% | 92.15% | 88.68% | 82.37% | 90.40% | 74.03%/81.95% | 85.51% | 0.89 | 0.68/0.66 | 
+| BiLSTM_Max_SGD_v2_WD | 77.70% | 81.62% | 91.98% | 88.51% | 81.55% | 87.60% | 74.61%/81.99% | 86.54% | 0.89 | 0.68/0.65 | 
+| BiLSTM_SGD_1 | 74.89% | 78.75% | 89.39% | 87.88% | 80.29% | 86.80% | 75.01%/82.54% | 86.06% | 0.87 | 0.61/0.59 | 
+| LSTM_Adam | 75.87% | 79.34% | 87.94% | 87.92% | 80.89% | 74.20% | 73.68%/81.60% | 83.86% | 0.86 | 0.62/0.60 | 
+| LSTM_SGD | 73.44% | 76.66% | 85.76% | 87.71% | 77.87% | 75.00% | 72.75%/80.94% | 83.30% | 0.86 | 0.59/0.58 |
 
 ### Visualization
 
-## TODO
-* Add inference file
-* Add weight distribution to tensorboard
-* Add sentence embedding distribution to tensorboard
-* LSTM vs Baseline
-	* Boring baseline
-	* LSTM able to learn relations between words (e.g. "not raining")
-	* But still, baseline performs quite well (2/3 correct)? Why? => check bias of dataset
-* Bi-LSTM
-	* Find sentences on which it performs significantly better than standard LSTM
-* Bi-LSTM max pooling
-	* Add visualization of importance of words in a sentence for max pooling
-	* Analyse what words activate which feature channels the most
-	* Idea to test out: drop a few channels of the sentence embedding and look again on TSNE
-* General
-	* TSNE for sentence embeddings on various datasets (labels given by e.g. SentEval tasks)
-	* Test for bias of dataset (augment premise)
-* 
