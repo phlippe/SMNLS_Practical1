@@ -8,7 +8,16 @@ This repository contains an implementation of a framework for training general p
 * Bi-directional LSTM using the concatenation of the last hidden states of both direction
 * Bi-direcitonal LSTM with a max pooling operation applied on the hidden states of each word
 
-This project was done for the course _Stochastical Methods in Natural Language Semantics_ at the University of Amsterdam 2019. 
+To visualize and analyze the learned embeddings, tSNE plots can be created by using the Tensorboard projector. One interesting visualization is for example the max pooling patterns for certain words. Therefore, we represent every word by the number of times its feature value for a certain channel was used to create a sentence embedding. Similar to GloVe, topic groups can be easily found. However, connector words like "_but_", "_and_" and "_perhaps_" form also a group, namely a group with very low activations. This shows what words the network does not explicitly includes in the sentence embedding.
+
+<p align="center">
+  <img src="report/figures/word_importance/neighbors_animal.png" width="200" title="tSNE neighbours for animals">
+  <img src="report/figures/word_importance/neighbors_nationalities.png" width="200" title="tSNE neighbours for nationalities">
+  <img src="report/figures/word_importance/neighbors_human_properties.png" width="200" alt="tSNE neighbours for human properties">
+  <img src="report/figures/word_importance/neighbors_irrelevant.png" width="200" alt="tSNE neighbours for words with low importance">
+</p>
+
+A short report with a collection with the most important results is included in the repository [here](report/Report_Lippe.pdf). This project was done for the course _Stochastical Methods in Natural Language Semantics_ at the University of Amsterdam 2019. The project description can be found [here](./smnls_practical.pdf).  
 
 ## Preparation
 In order to run this code, you need to have the following packages installed:
@@ -213,4 +222,13 @@ A new classifier can be similarly added as a new encoder. However, if the classi
 
 ### Visualization
 
-The evaluation offers the option `--visualize_embeddings`. In this, the embeddings are exported to tensorboard in which a tSNE analysis can be executed (use the tab _Projector_ for that). Example results can be found in the 1-page report.
+The evaluation offers the option `--visualize_embeddings`. In this, the embeddings are exported to tensorboard in which a tSNE analysis can be executed (use the tab _Projector_ for that). Example results can be found in the 1-page report and more are shown here.
+
+<p align="center">
+  <img src="report/figures/word_importance/neighbors_animal.png" width="200" title="tSNE neighbours for animals">
+  <img src="report/figures/word_importance/neighbors_nationalities.png" width="200" title="tSNE neighbours for nationalities">
+  <img src="report/figures/word_importance/neighbors_human_properties.png" width="200" alt="tSNE neighbours for human properties">
+  <img src="report/figures/word_importance/neighbors_irrelevant.png" width="200" alt="tSNE neighbours for words with low importance">
+  <img src="report/figures/word_importance/neighbors_numbers.png" width="200" title="tSNE neighbours for numbers">
+  <img src="report/figures/word_importance/neighbors_sports.png" width="200" title="tSNE neighbours for sports">
+</p>
