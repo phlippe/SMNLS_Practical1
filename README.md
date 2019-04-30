@@ -1,6 +1,14 @@
-# SMNLS Practical 1
-* _Course_: Stochastical Methods in Natural Language Semantics
+# General purpose sentence embeddings based on Natural Language Inference 
 * _Author_: Phillip Lippe (Contact: phillip.lippe@googlemail.com)
+
+This repository contains an implementation of a framework for training general purpose sentence encoder trained on the task Natural Language Inference. The implementation is based on the paper from [Conneau et. al (2017)](https://arxiv.org/abs/1705.02364) and includes the four encoder model:
+
+* Bag-of-Words approach averaging the GloVe embedding of the words in a sentence
+* Uni-directional LSTM using the last hidden state to represent a sentence
+* Bi-directional LSTM using the concatenation of the last hidden states of both direction
+* Bi-direcitonal LSTM with a max pooling operation applied on the hidden states of each word
+
+This project was done for the course _Stochastical Methods in Natural Language Semantics_ at the University of Amsterdam 2019. 
 
 ## Preparation
 In order to run this code, you need to have the following packages installed:
